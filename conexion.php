@@ -4,7 +4,7 @@ error_reporting(0);
 ini_set('display_errors', 0);
 
 // Host, puerto y credenciales directas de Aiven sin espacios
-$host = 'mysql-3d44bc41-ricardoernestomelara-spec.k.aivencloud.com';
+$host = 'mysql-eff2255-clases-8fe7.g.aivencloud.com';
 $user = 'avnadmin';
 $pass = 'AVNS_CNDqZqgot6GyR9ZldBV';
 $db   = 'defaultdb';
