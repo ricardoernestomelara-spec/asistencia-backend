@@ -1,20 +1,24 @@
 <?php
+// Silenciar salidas HTML de advertencias
 error_reporting(0);
 ini_set('display_errors', 0);
 
-if (ob_get_length()) ob_clean();
+// Iniciar y limpiar cualquier búfer previo
+ob_start();
 
-// Permite peticiones desde cualquier origen (Vercel)
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Responde inmediatamente a la verificación de seguridad previa (Preflight OPTIONS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    ob_clean();
     http_response_code(200);
     exit;
 }
+
+// Limpiar cualquier basura HTML generada antes del require
+if (ob_get_length()) ob_clean();
 
 require_once __DIR__ . '/conexion.php';
 
