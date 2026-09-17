@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ModalAsistencia from './ModalAsistencia';
 
-const API_BASE = 'http://localhost/proyecto%20venta/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://asistencia-backend-qgim.onrender.com/api';
 
 const TablaAsistencia = ({ docenteId = 1 }) => {
   const [alumnos, setAlumnos] = useState([]);
