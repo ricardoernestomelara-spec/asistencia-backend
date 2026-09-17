@@ -2,15 +2,14 @@
 error_reporting(0);
 ini_set('display_errors', 0);
 
-$host = 'mysql-3d44bc41-ricardoernestomelara-spec.k.aivencloud.com';
+// Host exacto sin espacios ocultos
+$host = trim('mysql-3d44bc41-ricardoernestomelara-spec.k.aivencloud.com');
 $port = 22133;
 $user = 'avnadmin';
 
-// Lee las credenciales del entorno
-$password = getenv('DB_PASSWORD') ?: getenv('DB_PASS') ?: $_ENV['DB_PASS'] ?: $_ENV['DB_PASSWORD'] ?: 'AVNS_CNDqZsgot6GyR9Z1dBV';
+$password = getenv('DB_PASSWORD') ?: getenv('DB_PASS') ?: $_ENV['DB_PASS'] ?: $_ENV['DB_PASSWORD']; 
 $database = 'defaultdb';
 
-// Inicialización de mysqli habilitando SSL para Aiven
 $conn = mysqli_init();
 $conn->ssl_set(NULL, NULL, NULL, NULL, NULL);
 
