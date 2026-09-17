@@ -1,25 +1,25 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+// Evita que PHP muestre advertencias como texto HTML
+error_reporting(0);
+ini_set('display_errors', 0);
 
-header("Access-Control-Allow-Origin: *");
-header("Content-Type: application/json; charset=UTF-8");
+$host = 'mysql-3d44bc41-ricardoernestomelara-spec.k.aivencloud.com';
+$port = 22133;
+$user = 'avnadmin';
+$password = 'AVNS_CNDqZqgot6GyR9ZldBV';
+$database = 'defaultdb';
 
-$host = getenv('DB_HOST') ?: 'mysql-eff2255-clases-8fe7.g.aivencloud.com';
-$user = getenv('DB_USER') ?: 'avnadmin';
-$pass = getenv('DB_PASS') ?: '';
-$db   = getenv('DB_NAME') ?: 'defaultdb';
-$port = (int)(getenv('DB_PORT') ?: 22133);
+// Crear conexión
+$conn = new mysqli($host, $user, $password, $database, $port);
 
-try {
-    $conn = new mysqli($host, $user, $pass, $db, $port);
-    if ($conn->connect_error) {
-        die(json_encode(["error" => "Conexión fallida: " . $conn->connect_error]));
-    }
-    $conn->set_charset("utf8mb4");
-} catch (Exception $e) {
-    echo json_encode(["error" => "Excepción: " . $e->getMessage()]);
+// Si falla la conexión, devolver JSON puro y detener
+if ($conn->connect_error) {
+    if (ob_get_length()) ob_clean();
+    header("Content-Type: application/json; charset=UTF-8");
+    echo json_encode([
+        "success" => false, 
+        "message" => "Error de conexión a la base de datos"
+    ]);
     exit();
 }
 ?>
