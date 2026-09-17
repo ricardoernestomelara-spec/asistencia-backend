@@ -2,14 +2,16 @@
 error_reporting(0);
 ini_set('display_errors', 0);
 
+// Host limpio sin caracteres especiales ocultos
 $host = 'mysql-3d44bc41-ricardoernestomelara-spec.k.aivencloud.com';
 $port = 22133;
 $user = 'avnadmin';
 
-// Toma la clave desde las variables de Render
-$password = getenv('DB_PASSWORD') ?: getenv('DB_PASS') ?: $_ENV['DB_PASS'] ?: $_ENV['DB_PASSWORD']; 
+// Obtiene la contraseña configurada en Render
+$password = getenv('DB_PASS') ?: getenv('DB_PASSWORD') ?: $_ENV['DB_PASS'] ?: $_ENV['DB_PASSWORD'];
 $database = 'defaultdb';
 
+// Inicialización SSL para Aiven
 $conn = mysqli_init();
 $conn->ssl_set(NULL, NULL, NULL, NULL, NULL);
 
