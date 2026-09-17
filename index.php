@@ -10,7 +10,7 @@ echo json_encode([
 6
 "success" => true,
 7
-"message" => "API Asistencia funcionando correctamente"
+"message" => "Backend funcionando correctamente"
 8
 ]);
 9
