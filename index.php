@@ -1,19 +1,17 @@
 <?php
-2
- 
-3
-header('Content-Type: application/json');
-4
- 
-5
+
+
+    header('Content-Type: application/json');
+
+
+
 echo json_encode([
-6
+
 "success" => true,
-7
+
 "message" => "Backend funcionando correctamente"
-8
+
 ]);
-9
- 
-10
+
+
 ?>
