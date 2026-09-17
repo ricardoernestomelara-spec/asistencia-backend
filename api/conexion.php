@@ -1,16 +1,25 @@
 <?php
-$host = 'mysql-eff2255-clases-8fe7.g.aivencloud.com';
-$user = 'avnadmin';
-$pass = 'TU_CONTRASEÑA_DE_AIVEN'; // Reemplaza con tu contraseña de Aiven
-$db   = 'defaultdb';
-$port = 22133;
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-$conn = @new mysqli($host, $user, $pass, $db, $port);
+header("Access-Control-Allow-Origin: *");
+header("Content-Type: application/json; charset=UTF-8");
 
-if ($conn->connect_error) {
-    echo json_encode(["success" => false, "message" => "Error de conexión BD"]);
+$host = getenv('DB_HOST') ?: 'mysql-eff2255-clases-8fe7.g.aivencloud.com';
+$user = getenv('DB_USER') ?: 'avnadmin';
+$pass = getenv('DB_PASS') ?: '';
+$db   = getenv('DB_NAME') ?: 'defaultdb';
+$port = (int)(getenv('DB_PORT') ?: 22133);
+
+try {
+    $conn = new mysqli($host, $user, $pass, $db, $port);
+    if ($conn->connect_error) {
+        die(json_encode(["error" => "Conexión fallida: " . $conn->connect_error]));
+    }
+    $conn->set_charset("utf8mb4");
+} catch (Exception $e) {
+    echo json_encode(["error" => "Excepción: " . $e->getMessage()]);
     exit();
 }
-
-$conn->set_charset("utf8mb4");
 ?>
