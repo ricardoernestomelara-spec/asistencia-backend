@@ -1,0 +1,124 @@
+/* --- PALETA DE COLORES GLOBAL --- */
+:root {
+  --color-primary-dark: #1F2F98;   /* Encabezados, Sidebar y Tablas */
+  --color-primary-blue: #1CA7EC;   /* Botones principales y bordes de acento */
+  --color-accent-teal: #4ADEDE;    /* Detalles e indicadores */
+  --color-accent-purple: #787FF6;  /* Botones secundarios y bordes */
+  --color-light-blue: #7BD5F5;     /* Fondos suaves y hovers */
+  --color-bg-light: #F4F6F9;       /* Fondo general */
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body, html, #root {
+  width: 100%;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--color-bg-light);
+  color: #333;
+}
+
+/* --- CLASES DE ANCHO UNIFORME --- */
+.app-main-container {
+  width: 100%;
+  max-width: 1100px !important;
+  margin: 0 auto !important;
+  padding: 20px 15px;
+}
+
+.panel-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  border-top: 5px solid var(--color-primary-blue); /* Acento superior de la tarjeta */
+  box-shadow: 0 4px 12px rgba(31, 47, 152, 0.06);
+  padding: 24px;
+  margin-bottom: 24px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* --- HOMOGENEIZACIÓN Y ESTILOS DE TABLAS --- */
+.panel-card table {
+  width: 100% !important;
+  table-layout: fixed;
+}
+
+.panel-card th, .panel-card td {
+  word-wrap: break-word;
+}
+
+/* Aplicación del azul oscuro a las cabeceras de tablas */
+.table-dark {
+  background-color: var(--color-primary-dark) !important;
+  color: #ffffff !important;
+}
+
+.table-dark th {
+  background-color: var(--color-primary-dark) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+/* --- ADAPTACIÓN DE BOTONES BOOTSTRAP --- */
+.btn-info, .btn-primary {
+  background-color: var(--color-primary-blue) !important;
+  border-color: var(--color-primary-blue) !important;
+  color: #ffffff !important;
+}
+
+.btn-info:hover, .btn-primary:hover {
+  background-color: var(--color-primary-dark) !important;
+  border-color: var(--color-primary-dark) !important;
+}
+
+.btn-outline-secondary {
+  color: var(--color-accent-purple) !important;
+  border-color: var(--color-accent-purple) !important;
+}
+
+.btn-outline-secondary:hover {
+  background-color: var(--color-accent-purple) !important;
+  color: #ffffff !important;
+}
+
+/* --- PERSONALIZACIÓN DEL HEADER / NAVBAR --- */
+.navbar, 
+header, 
+div[style*="background"] { 
+  /* Ajusta si tu header usa una etiqueta específica */
+  background-color: #ffffff !important;
+  border-bottom: 2px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(31, 47, 152, 0.05);
+}
+
+/* Texto del usuario en el Header */
+.navbar-text, 
+header span, 
+header div {
+  color: var(--color-primary-dark) !important;
+  font-weight: 600;
+}
+
+/* Botón de Cerrar Sesión u opciones secundarias */
+.btn-danger {
+  background-color: #e63946 !important;
+  border-color: #e63946 !important;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+  background-color: #c52a36 !important;
+  border-color: #c52a36 !important;
+  transform: translateY(-1px);
+}
+
+/* Mejora visual al pasar el cursor sobre las filas de las tablas */
+.table-hover tbody tr:hover {
+  background-color: rgba(123, 213, 245, 0.12) !important;
+}
