@@ -13,15 +13,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 try {
-    // Incluir la conexión a la base de datos (PDO)
+    // Incluir conexión (PDO) desde la raíz
     require_once __DIR__ . '/../conexion.php';
 
-    // Compatibilidad por si en conexion.php usaste $pdo en vez de $conn
+    // Asegurar variable de conexión PDO
     if (!isset($conn) && isset($pdo)) {
         $conn = $pdo;
     }
 
-    // Verificar si $conn existe
     if (!isset($conn) || !$conn) {
         throw new Exception("Error interno: No hay conexión activa a la BD.");
     }
@@ -37,14 +36,13 @@ try {
         exit();
     }
 
-    // Consulta SQL usando sintaxis PDO
+    // Consulta con PDO en lugar de mysqli
     $sql = "SELECT id, nombre, email, password, IFNULL(rol, 'docente') AS rol FROM docentes WHERE email = :email LIMIT 1";
     $stmt = $conn->prepare($sql);
     $stmt->execute([':email' => $email]);
     $userBD = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($userBD) {
-        // Validación de contraseña cifrada o en texto plano
         if (password_verify($pass, $userBD['password']) || $pass === $userBD['password']) {
             echo json_encode([
                 "success" => true,
