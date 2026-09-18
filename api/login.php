@@ -1,15 +1,21 @@
 <?php
-// Cabeceras CORS estrictas enviadas inmediatamente
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Origin, Accept");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE");
-header("Content-Type: application/json; charset=UTF-8");
+// Limpiar cabeceras previas para evitar duplicados en Apache
+header_remove('Access-Control-Allow-Origin');
+header_remove('Access-Control-Allow-Headers');
+header_remove('Access-Control-Allow-Methods');
 
-// Manejo estricto de petición preflight (OPTIONS)
+// Cabeceras CORS forzadas
+header("Access-Control-Allow-Origin: *", true);
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Origin, Accept", true);
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE", true);
+
+// Manejo directo e inmediato del Preflight (OPTIONS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit(0);
 }
+
+header("Content-Type: application/json; charset=UTF-8");
 
 error_reporting(0);
 ini_set('display_errors', 0);
@@ -59,7 +65,6 @@ try {
     }
 
 } catch (Throwable $e) {
-    // Retornar 200 para garantizar que las cabeceras CORS no sean descartadas por el navegador
     http_response_code(200);
     echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }

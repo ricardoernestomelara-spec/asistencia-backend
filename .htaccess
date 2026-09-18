@@ -1,9 +1,2 @@
-<IfModule mod_headers.c>
-    Header always set Access-Control-Allow-Origin "*"
-    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
-    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Origin, Accept"
-</IfModule>
-
-# Responder 200 OK a OPTIONS sin hacer redirects
-SetEnvIf Request_Method "OPTIONS" IS_OPTIONS
-Header always set Access-Control-Max-Age "86400" env=IS_OPTIONS
+RewriteEngine On
+RewriteBase /
