@@ -1,9 +1,8 @@
 <?php
-// Configuración de errores
-error_reporting(0);
-ini_set('display_errors', 0);
-
-// Forzar respuesta JSON
+// Permitir peticiones desde tu Frontend en Vercel
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Content-Type: application/json; charset=UTF-8");
 
 // Manejo de petición preflight (OPTIONS)
@@ -13,10 +12,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 try {
-    // Incluir conexión (PDO) desde la raíz
     require_once __DIR__ . '/../conexion.php';
 
-    // Asegurar variable de conexión PDO
     if (!isset($conn) && isset($pdo)) {
         $conn = $pdo;
     }
@@ -25,7 +22,6 @@ try {
         throw new Exception("Error interno: No hay conexión activa a la BD.");
     }
 
-    // Obtener y decodificar el cuerpo JSON
     $input = json_decode(file_get_contents("php://input"), true);
 
     $email = trim($input['email'] ?? $input['usuario'] ?? '');
@@ -36,7 +32,6 @@ try {
         exit();
     }
 
-    // Consulta con PDO en lugar de mysqli
     $sql = "SELECT id, nombre, email, password, IFNULL(rol, 'docente') AS rol FROM docentes WHERE email = :email LIMIT 1";
     $stmt = $conn->prepare($sql);
     $stmt->execute([':email' => $email]);
