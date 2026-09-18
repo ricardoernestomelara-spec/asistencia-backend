@@ -1,20 +1,13 @@
 FROM php:8.2-apache
 
-# Instalar extensión mysqli requerida
-RUN docker-php-ext-install mysqli && docker-php-ext-enable mysqli
+# Habilitar los módulos de Apache necesarios para CORS y redirecciones
+RUN a2enmod headers rewrite
 
-# Habilitar mod_rewrite
-RUN a2enmod rewrite
+# Instalar extensiones necesarias para MySQL
+RUN docker-php-ext-install mysqli pdo pdo_mysql
 
-# Apuntar el DocumentRoot de Apache directamente a la carpeta /api
-ENV APACHE_DOCUMENT_ROOT /var/www/html/api
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
-
-# Copiar todo el contenido del repositorio
+# Copiar el código del proyecto al directorio web de Apache
 COPY . /var/www/html/
 
-# Dar permisos a Apache
+# Configurar permisos
 RUN chown -R www-data:www-data /var/www/html
-
-EXPOSE 80
