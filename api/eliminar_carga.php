@@ -1,39 +1,31 @@
 <?php
-error_reporting(0);
-ini_set('display_errors', 0);
-
-if (ob_get_length()) ob_clean();
-
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Methods: POST, DELETE, OPTIONS");
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
-    exit;
+    exit();
 }
 
-require_once __DIR__ . '/conexion.php';
+require_once __DIR__ . '/../conexion.php';
 
-$input = json_decode(file_get_contents("php://input"), true);
-$carga_id = intval($input['id'] ?? 0);
+$data = json_decode(file_get_contents("php://input"), true);
+$id = $data['id'] ?? null;
 
-if ($carga_id <= 0) {
-    echo json_encode(["success" => false, "message" => "ID de carga no válido"]);
-    exit;
+if (!$id) {
+    echo json_encode(["success" => false, "message" => "ID de carga invalido"]);
+    exit();
 }
 
-$sql = "DELETE FROM docente_carga WHERE id = ?";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $carga_id);
+try {
+    $stmt = $pdo->prepare("DELETE FROM carga_academica WHERE id = :id");
+    $stmt->execute([':id' => $id]);
 
-if ($stmt->execute()) {
-    echo json_encode(["success" => true, "message" => "Asignación eliminada correctamente"]);
-} else {
-    echo json_encode(["success" => false, "message" => "Error al eliminar la asignación"]);
+    echo json_encode(["success" => true, "message" => "Carga eliminada correctamente"]);
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(["success" => false, "message" => "Error al eliminar carga: " . $e->getMessage()]);
 }
-
-$stmt->close();
-$conn->close();
 ?>
