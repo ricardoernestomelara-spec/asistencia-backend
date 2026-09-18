@@ -4,7 +4,7 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
 
-// Si la petición es de verificación CORS (Preflight OPTIONS), terminar de inmediato
+// Manejo de petición preflight (OPTIONS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
@@ -13,14 +13,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 error_reporting(0);
 ini_set('display_errors', 0);
 
-// Host y credenciales de Aiven
+// Credenciales de Aiven
 $hostname = 'mysql-eff2255-clases-8fe7.g.aivencloud.com';
 $user     = 'avnadmin';
 $pass     = 'AVNS_CNDqZqgot6GyR9ZldBV';
 $db       = 'defaultdb';
 $port     = 22133;
 
-// Resolución por IP para evitar fallos de DNS en Render
+// Resolución de IP para evitar fallos DNS en Render
 $ip = gethostbyname($hostname);
 $host = ($ip !== $hostname) ? $ip : '146.190.168.190';
 
@@ -29,18 +29,19 @@ try {
     $options = [
         PDO::MYSQL_ATTR_SSL_CA => NULL,
         PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false,
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
     ];
 
+    // Instancia PDO principal
     $pdo = new PDO($dsn, $user, $pass, $options);
-
-    // Compatibilidad para scripts que utilizan mysqli ($conn)
-    $conn = mysqli_init();
-    $conn->ssl_set(NULL, NULL, NULL, NULL, NULL);
-    @$conn->real_connect($host, $user, $pass, $db, $port, NULL, MYSQLI_CLIENT_SSL);
+    
+    // Apuntamos $conn al mismo objeto PDO para compatibilidad total
+    $conn = $pdo;
 
 } catch (Exception $e) {
     header('Content-Type: application/json');
+    http_response_code(500);
     echo json_encode(["success" => false, "message" => "Error de conexion: " . $e->getMessage()]);
     exit();
 }
