@@ -1,22 +1,29 @@
 <?php
-// 1. Cabeceras CORS obligatorias (Deben ir al inicio)
+// 1. Desactivar compresión y búfer para entrega inmediata de encabezados
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', 1);
+}
+@ini_set('zlib.output_compression', 0);
+
+// 2. Encabezados CORS obligatorios
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
-// 2. Si el navegador pregunta permisos (OPTIONS), responder OK de inmediato sin tocar la BD
+// 3. Responder a peticiones Preflight (OPTIONS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
-    exit();
+    if (ob_get_level()) ob_end_clean();
+    flush();
+    exit(0);
 }
 
-// 3. Silenciar errores de HTML para evitar corromper la respuesta JSON
+// 4. Configuración de errores para peticiones POST/GET
 error_reporting(0);
 ini_set('display_errors', 0);
 ob_start();
 
-// 4. Conexión a la base de datos
 require_once __DIR__ . '/conexion.php';
 
 $input = json_decode(file_get_contents("php://input"), true);
