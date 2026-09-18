@@ -13,12 +13,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 try {
-    // Incluir la conexión a la base de datos
+    // Incluir la conexión a la base de datos (PDO)
     require_once __DIR__ . '/../conexion.php';
+
+    // Compatibilidad por si en conexion.php usaste $pdo en vez de $conn
+    if (!isset($conn) && isset($pdo)) {
+        $conn = $pdo;
+    }
 
     // Verificar si $conn existe
     if (!isset($conn) || !$conn) {
-        throw new Exception("Error interno: No hay conexion activa a la BD.");
+        throw new Exception("Error interno: No hay conexión activa a la BD.");
     }
 
     // Obtener y decodificar el cuerpo JSON
@@ -32,27 +37,22 @@ try {
         exit();
     }
 
-    // Consulta SQL a la tabla docentes
-    $sql = "SELECT id, nombre, email, password, IFNULL(rol, 'docente') AS rol FROM docentes WHERE email = ?";
+    // Consulta SQL usando sintaxis PDO
+    $sql = "SELECT id, nombre, email, password, IFNULL(rol, 'docente') AS rol FROM docentes WHERE email = :email LIMIT 1";
     $stmt = $conn->prepare($sql);
+    $stmt->execute([':email' => $email]);
+    $userBD = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if (!$stmt) {
-        throw new Exception("Error en la consulta SQL: " . $conn->error);
-    }
-
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if ($userBD = $result->fetch_assoc()) {
+    if ($userBD) {
+        // Validación de contraseña cifrada o en texto plano
         if (password_verify($pass, $userBD['password']) || $pass === $userBD['password']) {
             echo json_encode([
                 "success" => true,
                 "usuario" => [
-                    "id" => $userBD['id'],
+                    "id"     => $userBD['id'],
                     "nombre" => $userBD['nombre'],
-                    "email" => $userBD['email'],
-                    "rol" => $userBD['rol']
+                    "email"  => $userBD['email'],
+                    "rol"    => $userBD['rol']
                 ]
             ]);
         } else {
@@ -61,9 +61,6 @@ try {
     } else {
         echo json_encode(["success" => false, "message" => "El usuario no existe"]);
     }
-
-    $stmt->close();
-    $conn->close();
 
 } catch (Exception $e) {
     http_response_code(500);
