@@ -1,19 +1,38 @@
 <?php
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Content-Type: application/json; charset=UTF-8");
+// Limpiar cabeceras previas para evitar duplicados
+header_remove('Access-Control-Allow-Origin');
+header_remove('Access-Control-Allow-Headers');
+header_remove('Access-Control-Allow-Methods');
+
+// Cabeceras CORS
+header("Access-Control-Allow-Origin: *", true);
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Origin, Accept", true);
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS", true);
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
-    exit();
+    exit(0);
 }
 
-require_once __DIR__ . '/../conexion.php';
+header("Content-Type: application/json; charset=UTF-8");
+
+error_reporting(0);
+ini_set('display_errors', 0);
 
 try {
-    // 1. Obtener Docentes
-    $stmtDocentes = $pdo->query("SELECT id, nombre, email FROM usuarios WHERE rol = 'docente' ORDER BY nombre ASC");
+    require_once __DIR__ . '/../conexion.php';
+
+    // Asegurar compatibilidad de variables de conexión
+    if (!isset($pdo) && isset($conn)) {
+        $pdo = $conn;
+    }
+
+    if (!isset($pdo) || !$pdo) {
+        throw new Exception("Error interno: No hay conexión activa a la BD.");
+    }
+
+    // 1. Obtener Docentes (Consulta corregida a la tabla 'docentes')
+    $stmtDocentes = $pdo->query("SELECT id, nombre, email FROM docentes ORDER BY nombre ASC");
     $docentes = $stmtDocentes->fetchAll(PDO::FETCH_ASSOC);
 
     // 2. Obtener Asignaturas / Módulos
@@ -30,11 +49,12 @@ try {
         "asignaturas" => $asignaturas,
         "secciones" => $secciones
     ]);
-} catch (Exception $e) {
-    http_response_code(500);
+
+} catch (Throwable $e) {
+    http_response_code(200);
     echo json_encode([
         "success" => false,
-        "message" => "Error al obtener catalogos: " . $e->getMessage()
+        "message" => "Error al obtener catálogos: " . $e->getMessage()
     ]);
 }
 ?>
