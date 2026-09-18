@@ -1,12 +1,11 @@
 <?php
-// Silenciar cualquier advertencia que corrompa la respuesta JSON
+// Silenciar cualquier advertencia HTML que rompa la respuesta JSON
 error_reporting(0);
 ini_set('display_errors', 0);
 
-// Credenciales tomadas directamente de tu panel de Aiven
 $host = 'mysql-eff2255-clases-8fe7.g.aivencloud.com';
 $user = 'avnadmin';
-$pass = 'AVNS_CNDqZqgot6GyR9ZldBV'; // Asegúrate de colocar aquí tu contraseña real de Aiven
+$pass = 'AVNS_CNDqZqgot6GyR9ZldBV'; // Tu contraseña de Aiven
 $db   = 'defaultdb';
 $port = 22133;
 
@@ -22,15 +21,16 @@ if (!$conn) {
     exit();
 }
 
-// Configurar SSL (Aiven requiere SSL_mode = REQUIRED)
+// Desactivar la validación del certificado SSL estricto para evitar bloqueos en servidores cloud
+$conn->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
 $conn->ssl_set(NULL, NULL, NULL, NULL, NULL);
 
-// Conectar utilizando el puerto y host correcto de Aiven
-if (!@$conn->real_connect($host, $user, $pass, $db, $port, NULL, MYSQLI_CLIENT_SSL)) {
+// Conectar a la base de datos de Aiven (Sin el arroba @ para capturar errores reales)
+if (!$conn->real_connect($host, $user, $pass, $db, $port, NULL, MYSQLI_CLIENT_SSL)) {
     header("Content-Type: application/json; charset=UTF-8");
     echo json_encode([
         "success" => false, 
-        "message" => "Error de conexión a la base de datos: " . mysqli_connect_error()
+        "message" => "Error de conexión a Aiven: " . mysqli_connect_error()
     ]);
     exit();
 }

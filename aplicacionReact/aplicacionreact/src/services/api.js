@@ -1,8 +1,8 @@
-const API_URL = import.meta.env.VITE_API_URL || 'https://asistencia-backend-qgim.onrender.com/api';
+import { API_BASE } from '../config';
 
 export const getAsistencia = async (claseId, seccionId) => {
   try {
-    const response = await fetch(`${API_URL}/${claseId}?seccionId=${encodeURIComponent(seccionId)}`);
+    const response = await fetch(`${API_BASE}/${claseId}?seccionId=${encodeURIComponent(seccionId)}`);
     if (!response.ok) {
       throw new Error('Error al obtener los datos de asistencia');
     }
@@ -15,7 +15,7 @@ export const getAsistencia = async (claseId, seccionId) => {
 
 export const postAsistencia = async (datos) => {
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(API_BASE, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -34,7 +34,7 @@ export const postAsistencia = async (datos) => {
 
 export const deleteAsistenciaPorFecha = async (claseId, fecha) => {
   try {
-    const response = await fetch(`${API_URL}/${claseId}/${fecha}`, {
+    const response = await fetch(`${API_BASE}/${claseId}/${fecha}`, {
       method: 'DELETE',
     });
     if (!response.ok) {
