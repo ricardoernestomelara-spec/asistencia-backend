@@ -5,7 +5,7 @@ ini_set('display_errors', 0);
 // Host y credenciales de Aiven
 $hostname = 'mysql-eff2255-clases-8fe7.g.aivencloud.com';
 $user     = 'avnadmin';
-$pass     = 'AVNS_CNDqZqgot6GyR9ZIcbV';
+$pass     = 'AVNS_CNDqZqgot6GyR9ZldBV';
 $db       = 'defaultdb';
 $port     = 22133;
 
