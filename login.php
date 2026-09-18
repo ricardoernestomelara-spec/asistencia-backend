@@ -1,67 +1,72 @@
 <?php
-// Silenciar errores para evitar salidas HTML
+// Configuración de errores
 error_reporting(0);
 ini_set('display_errors', 0);
-ob_start();
 
-// QUITAR O COMENTAR ESTAS TRES LÍNEAS DE PHP (Ya las maneja Apache):
-// header("Access-Control-Allow-Origin: *");
-// header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-// header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-
+// Forzar respuesta JSON
 header("Content-Type: application/json; charset=UTF-8");
 
+// Manejo de petición preflight (OPTIONS)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    if (ob_get_length()) ob_clean();
     http_response_code(200);
     exit();
 }
 
-// Limpiar búfer antes del require
-if (ob_get_length()) ob_clean();
+try {
+    // Incluir la conexión a la base de datos
+    require_once __DIR__ . '/conexion.php';
 
-require_once __DIR__ . '/conexion.php';
-
-$input = json_decode(file_get_contents("php://input"), true);
-
-$email = trim($input['email'] ?? $input['usuario'] ?? '');
-$pass = trim($input['password'] ?? '');
-
-if (empty($email) || empty($pass)) {
-    echo json_encode(["success" => false, "message" => "Ingresa correo/usuario y contraseña"]);
-    exit();
-}
-
-$sql = "SELECT id, nombre, email, password, IFNULL(rol, 'docente') AS rol FROM docentes WHERE email = ?";
-$stmt = $conn->prepare($sql);
-
-if (!$stmt) {
-    echo json_encode(["success" => false, "message" => "Error al preparar la consulta"]);
-    exit();
-}
-
-$stmt->bind_param("s", $email);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($userBD = $result->fetch_assoc()) {
-    if (password_verify($pass, $userBD['password']) || $pass === $userBD['password']) {
-        echo json_encode([
-            "success" => true,
-            "usuario" => [
-                "id" => $userBD['id'],
-                "nombre" => $userBD['nombre'],
-                "email" => $userBD['email'],
-                "rol" => $userBD['rol']
-            ]
-        ]);
-    } else {
-        echo json_encode(["success" => false, "message" => "Contraseña incorrecta"]);
+    // Verificar si $conn existe
+    if (!isset($conn) || !$conn) {
+        throw new Exception("Error interno: No hay conexion activa a la BD.");
     }
-} else {
-    echo json_encode(["success" => false, "message" => "El usuario no existe"]);
-}
 
-$stmt->close();
-$conn->close();
+    // Obtener y decodificar el cuerpo JSON
+    $input = json_decode(file_get_contents("php://input"), true);
+
+    $email = trim($input['email'] ?? $input['usuario'] ?? '');
+    $pass = trim($input['password'] ?? '');
+
+    if (empty($email) || empty($pass)) {
+        echo json_encode(["success" => false, "message" => "Ingresa correo y contraseña"]);
+        exit();
+    }
+
+    // Consulta SQL a la tabla docentes
+    $sql = "SELECT id, nombre, email, password, IFNULL(rol, 'docente') AS rol FROM docentes WHERE email = ?";
+    $stmt = $conn->prepare($sql);
+
+    if (!$stmt) {
+        throw new Exception("Error en la consulta SQL: " . $conn->error);
+    }
+
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($userBD = $result->fetch_assoc()) {
+        if (password_verify($pass, $userBD['password']) || $pass === $userBD['password']) {
+            echo json_encode([
+                "success" => true,
+                "usuario" => [
+                    "id" => $userBD['id'],
+                    "nombre" => $userBD['nombre'],
+                    "email" => $userBD['email'],
+                    "rol" => $userBD['rol']
+                ]
+            ]);
+        } else {
+            echo json_encode(["success" => false, "message" => "Contraseña incorrecta"]);
+        }
+    } else {
+        echo json_encode(["success" => false, "message" => "El usuario no existe"]);
+    }
+
+    $stmt->close();
+    $conn->close();
+
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
+}
 ?>
