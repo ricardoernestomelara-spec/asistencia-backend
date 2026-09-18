@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 try {
     // Incluir la conexión a la base de datos
-    require_once __DIR__ . '/conexion.php';
+    require_once __DIR__ . '/../conexion.php';
 
     // Verificar si $conn existe
     if (!isset($conn) || !$conn) {
