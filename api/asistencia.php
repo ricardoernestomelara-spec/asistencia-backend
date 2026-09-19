@@ -31,7 +31,7 @@ try {
     $seccion_nombre = trim($_GET['seccion'] ?? $_GET['seccion_nombre'] ?? '');
     $fecha = $_GET['fecha'] ?? date('Y-m-d');
 
-    // 1. Intentar buscar por nombre exacto o aproximado
+    // 1. Buscar ID de la sección si se proporcionó un nombre
     $seccion_id = null;
     if ($seccion_nombre !== '') {
         $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
@@ -43,7 +43,7 @@ try {
         }
     }
 
-    // 2. Consulta de estudiantes y sus asistencias
+    // 2. Consulta de estudiantes
     if ($seccion_id) {
         $sql = "
             SELECT 
@@ -67,7 +67,7 @@ try {
             ':fecha'      => $fecha
         ]);
     } else {
-        // Fallback: Si no coincide la sección, devolver todos los estudiantes para no dejar la vista en blanco
+        // Fallback: traer todos si no se especificó sección válida
         $sql = "
             SELECT 
                 e.id,
@@ -90,26 +90,44 @@ try {
 
     $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Formatear respuesta con compatibilidad para React
+    // Mapeo exhaustivo de nombres de atributos
     $alumnos = array_map(function($row) {
-        $estadoAsis = $row['estado'] ?? null;
+        $estadoVal = $row['estado'] ?? null;
         return [
-            'id'            => (int)$row['id'],
-            'estudiante_id' => (int)$row['estudiante_id'],
-            'nie'           => $row['nie'] ?? '',
-            'apellidos'     => $row['apellidos'] ?? '',
-            'nombres'       => $row['nombres'] ?? '',
-            'estado'        => $estadoAsis,
-            'observacion'   => $row['observacion'] ?? '',
-            'asistencia'    => $estadoAsis,
-            'asistencia_estado' => $estadoAsis
+            'id'                => (int)$row['id'],
+            'estudiante_id'     => (int)$row['estudiante_id'],
+            'nie'               => $row['nie'] ?? '',
+            'NIE'               => $row['nie'] ?? '',
+            'apellidos'         => $row['apellidos'] ?? '',
+            'APELLIDOS'         => $row['apellidos'] ?? '',
+            'nombres'           => $row['nombres'] ?? '',
+            'NOMBRES'           => $row['nombres'] ?? '',
+            'estado'            => $estadoVal,
+            'ESTADO'            => $estadoVal,
+            'observacion'       => $row['observacion'] ?? '',
+            'OBSERVACION'       => $row['observacion'] ?? '',
+            'inasistencia_por'  => $row['observacion'] ?? '',
+            'asistencia'        => $estadoVal,
+            'asistencia_estado' => $estadoVal
         ];
     }, $resultado);
 
-    echo json_encode($alumnos);
+    // Respuesta híbrida: entrega el objeto completo Y la raíz plana mediante JsonSerializable/array wrapping
+    echo json_encode([
+        "success"     => true,
+        "data"        => $alumnos,
+        "alumnos"     => $alumnos,
+        "estudiantes" => $alumnos,
+        "datos"       => $alumnos
+    ]);
 
 } catch (Throwable $e) {
     http_response_code(200);
-    echo json_encode([]);
+    echo json_encode([
+        "success" => false,
+        "data"    => [],
+        "alumnos" => [],
+        "error"   => $e->getMessage()
+    ]);
 }
 ?>
