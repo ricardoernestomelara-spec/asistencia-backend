@@ -29,7 +29,7 @@ try {
         throw new Exception("Sin conexión a la base de datos.");
     }
 
-    // 1. Asegurar tablas requeridas
+    // 1. Crear tablas si no existen
     $pdo->exec("CREATE TABLE IF NOT EXISTS secciones (
         id INT AUTO_INCREMENT PRIMARY KEY,
         nombre VARCHAR(100) UNIQUE NOT NULL
@@ -37,7 +37,7 @@ try {
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS estudiantes (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        nie VARCHAR(20) UNIQUE NOT NULL,
+        nie VARCHAR(50) NOT NULL,
         apellidos VARCHAR(100) NOT NULL,
         nombres VARCHAR(100) NOT NULL,
         seccion_id INT NOT NULL,
@@ -54,12 +54,11 @@ try {
         UNIQUE KEY unique_asistencia (estudiante_id, fecha)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-    // Alter table para añadir columna observacion si la tabla ya existía de antes
-    try {
-        $pdo->exec("ALTER TABLE asistencia ADD COLUMN observacion VARCHAR(255) NULL;");
-    } catch (Throwable $ignored) {}
+    // Intento silencioso de agregar columna por si falta en asistencia
+    try { $pdo->exec("ALTER TABLE asistencia ADD COLUMN observacion VARCHAR(255) NULL;"); } catch (Throwable $t) {}
 
-    $data = json_decode(file_get_contents("php://input"), true);
+    $rawInput = file_get_contents("php://input");
+    $data = json_decode($rawInput, true);
 
     if (!$data) {
         echo json_encode(["success" => false, "message" => "No se recibieron datos JSON válidos."]);
@@ -67,7 +66,7 @@ try {
     }
 
     $fecha = $data['fecha'] ?? date('Y-m-d');
-    $seccion_nombre = $data['seccion'] ?? '1° A Software';
+    $seccion_nombre = $data['seccion'] ?? $data['seccion_nombre'] ?? '1° A Software';
     $items = $data['asistencias'] ?? $data['alumnos'] ?? $data['estudiantes'] ?? $data['datos'] ?? $data;
 
     if (!is_array($items) || empty($items)) {
@@ -92,12 +91,10 @@ try {
 
     $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :val OR nie = :val LIMIT 1");
     
+    // Inserción directa garantizando que nie nunca vaya vacío
     $stmtAutoCreateEst = $pdo->prepare("
         INSERT INTO estudiantes (nie, apellidos, nombres, seccion_id) 
         VALUES (:nie, :apellidos, :nombres, :seccion_id)
-        ON DUPLICATE KEY UPDATE 
-            apellidos = VALUES(apellidos), 
-            nombres = VALUES(nombres)
     ");
 
     $stmtInsertAsis = $pdo->prepare("
@@ -110,29 +107,38 @@ try {
 
     $insertados = 0;
 
-    foreach ($items as $key => $val) {
+    foreach ($items as $val) {
         if (!is_array($val)) continue;
 
-        $identificador = $val['estudiante_id'] ?? $val['id'] ?? $val['nie'] ?? $val['NIE'] ?? null;
-        
-        // Garantizar que 'nie' jamás sea NULL
-        $nieVal = !empty($val['nie']) ? $val['nie'] : (!empty($val['NIE']) ? $val['NIE'] : ($identificador ? (string)$identificador : 'NIE-' . rand(10000, 99999)));
-        
-        $apellidos = !empty($val['apellidos']) ? $val['apellidos'] : (!empty($val['APELLIDOS']) ? $val['APELLIDOS'] : 'Apellido');
-        $nombres = !empty($val['nombres']) ? $val['nombres'] : (!empty($val['NOMBRES']) ? $val['NOMBRES'] : 'Nombre');
-        $estado = $val['estado'] ?? 'Asistió';
-        $observacion = $val['observacion'] ?? $val['inasistencia_por'] ?? null;
-
-        $realStudentId = null;
-
-        if ($identificador) {
-            $stmtFindEst->execute([':val' => $identificador]);
-            $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
-            if ($est) {
-                $realStudentId = $est['id'];
+        // Extraer NIE o ID desde cualquier parámetro posible del JSON
+        $nieVal = null;
+        foreach (['nie', 'NIE', 'estudiante_id', 'id_estudiante', 'id'] as $key) {
+            if (!empty($val[$key])) {
+                $nieVal = (string)$val[$key];
+                break;
             }
         }
 
+        // Si después de buscar sigue sin haber un valor, generar un NIE provisional válido de 8 dígitos
+        if (empty($nieVal)) {
+            $nieVal = (string)rand(10000000, 99999999);
+        }
+
+        $apellidos = !empty($val['apellidos']) ? $val['apellidos'] : (!empty($val['APELLIDOS']) ? $val['APELLIDOS'] : 'Apellido');
+        $nombres = !empty($val['nombres']) ? $val['nombres'] : (!empty($val['NOMBRES']) ? $val['NOMBRES'] : 'Nombre');
+        $estado = $val['estado'] ?? $val['ESTADO'] ?? 'Asistió';
+        $observacion = $val['observacion'] ?? $val['inasistencia_por'] ?? $val['OBSERVACION'] ?? null;
+
+        $realStudentId = null;
+
+        // 1. Intentar encontrar al estudiante en la BD por su ID o NIE
+        $stmtFindEst->execute([':val' => $nieVal]);
+        $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
+        if ($est) {
+            $realStudentId = $est['id'];
+        }
+
+        // 2. Si no existe, crearlo obligatoriamente pasando :nie relleno
         if (!$realStudentId) {
             $stmtAutoCreateEst->execute([
                 ':nie'        => $nieVal,
@@ -141,14 +147,9 @@ try {
                 ':seccion_id' => $seccion_id
             ]);
             $realStudentId = $pdo->lastInsertId();
-
-            if (!$realStudentId) {
-                $stmtFindEst->execute([':val' => $nieVal]);
-                $estRe = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
-                $realStudentId = $estRe['id'] ?? null;
-            }
         }
 
+        // 3. Registrar asistencia
         if ($realStudentId) {
             $stmtInsertAsis->execute([
                 ':estudiante_id' => $realStudentId,
