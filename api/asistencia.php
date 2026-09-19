@@ -31,7 +31,7 @@ try {
     $seccion_nombre = trim($_GET['seccion'] ?? $_GET['seccion_nombre'] ?? '');
     $fecha = $_GET['fecha'] ?? date('Y-m-d');
 
-    // 1. Buscar ID de la sección si se proporcionó un nombre
+    // 1. Obtener ID de la sección
     $seccion_id = null;
     if ($seccion_nombre !== '') {
         $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
@@ -43,7 +43,7 @@ try {
         }
     }
 
-    // 2. Consulta de estudiantes
+    // 2. Consulta JOIN entre estudiantes y la última asistencia registrada o la de la fecha
     if ($seccion_id) {
         $sql = "
             SELECT 
@@ -67,7 +67,6 @@ try {
             ':fecha'      => $fecha
         ]);
     } else {
-        // Fallback: traer todos si no se especificó sección válida
         $sql = "
             SELECT 
                 e.id,
@@ -90,9 +89,9 @@ try {
 
     $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Mapeo exhaustivo de nombres de atributos
+    // Mapeo con todas las variaciones de nombres de campo que React suele leer
     $alumnos = array_map(function($row) {
-        $estadoVal = $row['estado'] ?? null;
+        $estadoVal = $row['estado'] !== null ? $row['estado'] : '--';
         return [
             'id'                => (int)$row['id'],
             'estudiante_id'     => (int)$row['estudiante_id'],
@@ -101,33 +100,25 @@ try {
             'apellidos'         => $row['apellidos'] ?? '',
             'APELLIDOS'         => $row['apellidos'] ?? '',
             'nombres'           => $row['nombres'] ?? '',
-            'NOMBRES'           => $row['nombres'] ?? '',
+            'NOMBRES'           => $row['NOMBRES'] ?? $row['nombres'] ?? '',
             'estado'            => $estadoVal,
             'ESTADO'            => $estadoVal,
-            'observacion'       => $row['observacion'] ?? '',
-            'OBSERVACION'       => $row['observacion'] ?? '',
-            'inasistencia_por'  => $row['observacion'] ?? '',
             'asistencia'        => $estadoVal,
-            'asistencia_estado' => $estadoVal
+            'asistencia_estado' => $estadoVal,
+            'registro'          => $estadoVal,
+            'REGISTRO'          => $estadoVal,
+            'sin_registros'     => $estadoVal,
+            'SIN_REGISTROS'     => $estadoVal,
+            'observacion'       => $row['observacion'] ?? '',
+            'OBSERVACION'       => $row['observacion'] ?? ''
         ];
     }, $resultado);
 
-    // Respuesta híbrida: entrega el objeto completo Y la raíz plana mediante JsonSerializable/array wrapping
-    echo json_encode([
-        "success"     => true,
-        "data"        => $alumnos,
-        "alumnos"     => $alumnos,
-        "estudiantes" => $alumnos,
-        "datos"       => $alumnos
-    ]);
+    // Responder como Arreglo Plano directo para compatibilidad total con iteradores React .map()
+    echo json_encode($alumnos);
 
 } catch (Throwable $e) {
     http_response_code(200);
-    echo json_encode([
-        "success" => false,
-        "data"    => [],
-        "alumnos" => [],
-        "error"   => $e->getMessage()
-    ]);
+    echo json_encode([]);
 }
 ?>
