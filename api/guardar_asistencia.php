@@ -54,6 +54,13 @@ try {
         UNIQUE KEY unique_asistencia (estudiante_id, fecha)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
+    // 2. Agregar la columna 'observacion' a la tabla asistencia si ya existía sin ella
+    try {
+        $pdo->exec("ALTER TABLE asistencia ADD COLUMN observacion VARCHAR(255) NULL;");
+    } catch (Throwable $ignored) {
+        // La columna ya existe, ignorar excepción
+    }
+
     $data = json_decode(file_get_contents("php://input"), true);
 
     if (!$data) {
@@ -85,7 +92,6 @@ try {
 
     $pdo->beginTransaction();
 
-    // Consultas preparadas
     $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :val OR nie = :val LIMIT 1");
     
     $stmtAutoCreateEst = $pdo->prepare("
@@ -118,7 +124,6 @@ try {
 
         $realStudentId = null;
 
-        // Búsqueda de estudiante existente
         if ($identificador) {
             $stmtFindEst->execute([':val' => $identificador]);
             $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
@@ -127,7 +132,6 @@ try {
             }
         }
 
-        // Si no existe, crearlo dinámicamente en la base de datos
         if (!$realStudentId) {
             $stmtAutoCreateEst->execute([
                 ':nie'        => $nie,
@@ -144,7 +148,6 @@ try {
             }
         }
 
-        // Guardar la asistencia
         if ($realStudentId) {
             $stmtInsertAsis->execute([
                 ':estudiante_id' => $realStudentId,
