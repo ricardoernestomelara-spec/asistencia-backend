@@ -38,7 +38,9 @@ try {
 
     $fecha = $data['fecha'] ?? date('Y-m-d');
     $seccion_nombre = $data['seccion'] ?? $data['seccion_nombre'] ?? '1° A Software';
-    $items = $data['asistencias'] ?? $data['alumnos'] ?? $data['estudiantes'] ?? $data['datos'] ?? $data;
+    
+    // CORRECCIÓN AQUÍ: Se añade $data['detalles'] para capturar el payload que envía React
+    $items = $data['detalles'] ?? $data['asistencias'] ?? $data['alumnos'] ?? $data['estudiantes'] ?? $data['datos'] ?? $data;
 
     if (!is_array($items) || empty($items)) {
         echo json_encode(["success" => false, "message" => "No hay datos de asistencia para guardar"]);
