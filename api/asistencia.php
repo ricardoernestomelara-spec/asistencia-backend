@@ -1,78 +1,59 @@
 <?php
+require_once __DIR__ . '/conexion.php';
+
+// Encabezados CORS
 header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json; charset=UTF-8");
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+$seccion = $_GET['seccion'] ?? '';
+$asignatura_id = $_GET['asignatura_id'] ?? '';
+$periodo_id = $_GET['periodo_id'] ?? '';
 
-require_once __DIR__ . '/../conexion.php';
-
-// Capturar parámetros
-$seccion_id = $_GET['seccion_id'] ?? null;
-$seccion_nombre = $_GET['seccion'] ?? null;
-$asignatura = $_GET['asignatura'] ?? null;
-
-// Normalizar la captura de fecha (prioriza si viene por GET en cualquier formato)
-$fecha = $_GET['fecha'] ?? $_GET['fecha_asistencia'] ?? $_GET['fecha_registro'] ?? date('Y-m-d');
-
-if (!$seccion_id && !$seccion_nombre) {
-    echo json_encode(["success" => false, "message" => "Sección no especificada"]);
-    exit();
+if (empty($seccion)) {
+    echo json_encode([]);
+    exit;
 }
 
 try {
-    // Si se envía el nombre textual de la sección (ej. "1° A Software"), buscar su ID numérico
-    if (!$seccion_id && $seccion_nombre) {
-        $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE nombre = :nombre LIMIT 1");
-        $stmtSec->execute([':nombre' => $seccion_nombre]);
-        $secResult = $stmtSec->fetch(PDO::FETCH_ASSOC);
-        
-        if ($secResult) {
-            $seccion_id = $secResult['id'];
-        } else {
-            $seccion_id = $seccion_nombre; 
-        }
+    if (!isset($pdo) && isset($conn)) {
+        $pdo = $conn;
     }
 
-    // Consulta SQL con coincidencia de estudiante_id y la fecha seleccionada
-    $sql = "
+    // Consulta DISTINCT / GROUP BY por estudiante para garantizar filas únicas
+    $query = "
         SELECT 
-            e.id AS id,
-            e.id AS estudiante_id, 
-            e.nombres,
+            e.id AS estudiante_id,
+            e.nie,
             e.apellidos,
-            e.nie, 
-            COALESCE(a.estado, '--') AS estado,
-            COALESCE(a.estado, '--') AS asistencia
+            e.nombres,
+            s.nombre AS seccion,
+            MAX(a.estado) AS estado_asistencia,
+            MAX(a.fecha) AS fecha
         FROM estudiantes e
+        INNER JOIN secciones s ON e.seccion_id = s.id
         LEFT JOIN asistencia a 
             ON e.id = a.estudiante_id 
-            AND DATE(a.fecha) = :fecha
-        WHERE e.seccion_id = :seccion_id
+            AND (:asignatura_id = '' OR a.asignatura_id = :asignatura_id)
+            AND (:periodo_id = '' OR a.periodo_id = :periodo_id)
+        WHERE s.nombre = :seccion
+          AND e.nie NOT LIKE 'TEMP-%'
+        GROUP BY e.id, e.nie, e.apellidos, e.nombres, s.nombre
         ORDER BY e.apellidos ASC, e.nombres ASC
     ";
-    
-    $stmt = $pdo->prepare($sql);
+
+    $stmt = $pdo->prepare($query);
     $stmt->execute([
-        ':seccion_id' => $seccion_id, 
-        ':fecha' => $fecha
+        ':seccion' => $seccion,
+        ':asignatura_id' => $asignatura_id,
+        ':periodo_id' => $periodo_id
     ]);
-    
+
     $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    echo json_encode([
-        "success" => true, 
-        "fecha_consultada" => $fecha,
-        "alumnos" => $estudiantes,
-        "estudiantes" => $estudiantes
-    ]);
+    echo json_encode($estudiantes);
 
-} catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode(["success" => false, "message" => "Error al consultar asistencia: " . $e->getMessage()]);
+} catch (PDOException $e) {
+    echo json_encode(['error' => $e->getMessage()]);
 }
 ?>
