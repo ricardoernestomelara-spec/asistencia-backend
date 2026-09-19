@@ -1,5 +1,4 @@
 <?php
-// Cabeceras CORS
 header_remove('Access-Control-Allow-Origin');
 header_remove('Access-Control-Allow-Headers');
 header_remove('Access-Control-Allow-Methods');
@@ -29,62 +28,65 @@ try {
         throw new Exception("Sin conexión a la base de datos.");
     }
 
-    // Aceptar 'seccion', 'seccion_id' o parámetro por defecto
-    $seccion_param = $_GET['seccion'] ?? $_GET['seccion_id'] ?? null;
+    $seccion_nombre = $_GET['seccion'] ?? $_GET['seccion_nombre'] ?? '1° A Software';
     $fecha = $_GET['fecha'] ?? date('Y-m-d');
 
-    // Si no viene sección especificada, tomamos la primera disponible en la BD
-    if (!$seccion_param) {
-        $stmtSec = $pdo->query("SELECT nombre FROM secciones LIMIT 1");
-        $secRow = $stmtSec->fetch(PDO::FETCH_ASSOC);
-        $seccion_param = $secRow ? $secRow['nombre'] : '';
+    // Obtener ID de la sección
+    $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE nombre = :nombre LIMIT 1");
+    $stmtSec->execute([':nombre' => $seccion_nombre]);
+    $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
+
+    if (!$sec) {
+        echo json_encode([]);
+        exit();
     }
 
-    // Consulta amplia que obtiene a los estudiantes mapeando apellidos y nombres
+    $seccion_id = $sec['id'];
+
+    // Consultar estudiantes y su asistencia en la fecha dada
     $sql = "
         SELECT 
-            e.id, 
-            e.id AS estudiante_id, 
-            e.nie, 
-            e.apellidos, 
-            e.nombres, 
-            CONCAT(e.apellidos, ' ', e.nombres) AS nombre,
-            COALESCE(a.estado, 'presente') AS estado
+            e.id,
+            e.id AS estudiante_id,
+            e.nie,
+            e.apellidos,
+            e.nombres,
+            a.estado,
+            a.observacion,
+            a.fecha
         FROM estudiantes e
-        LEFT JOIN secciones s ON e.seccion_id = s.id
-        LEFT JOIN asistencia a ON e.id = a.estudiante_id AND a.fecha = :fecha
-        WHERE s.nombre = :seccion_texto 
-           OR e.seccion_id = :seccion_id 
-           OR :seccion_vacia = ''
+        LEFT JOIN asistencia a 
+            ON e.id = a.estudiante_id AND a.fecha = :fecha
+        WHERE e.seccion_id = :seccion_id
         ORDER BY e.apellidos ASC, e.nombres ASC
     ";
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute([
-        ':seccion_texto' => $seccion_param,
-        ':seccion_id'    => is_numeric($seccion_param) ? (int)$seccion_param : 0,
-        ':seccion_vacia' => $seccion_param,
-        ':fecha'         => $fecha
+        ':seccion_id' => $seccion_id,
+        ':fecha'      => $fecha
     ]);
-    
-    $listaEstudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Respuesta JSON multi-compatible
-    echo json_encode([
-        "success"     => true,
-        "estudiantes" => $listaEstudiantes,
-        "alumnos"     => $listaEstudiantes,
-        "fechas"      => [],
-        "asistencias" => new stdClass()
-    ]);
+    $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Formatear respuesta asegurando compatibilidad con React
+    $alumnos = array_map(function($row) {
+        return [
+            'id'            => (int)$row['id'],
+            'estudiante_id' => (int)$row['estudiante_id'],
+            'nie'           => $row['nie'] ?? '',
+            'apellidos'     => $row['apellidos'] ?? '',
+            'nombres'       => $row['nombres'] ?? '',
+            'estado'        => $row['estado'] ?? null,
+            'observacion'   => $row['observacion'] ?? null,
+            'asistencia'    => $row['estado'] ?? null
+        ];
+    }, $resultado);
+
+    echo json_encode($alumnos);
 
 } catch (Throwable $e) {
     http_response_code(200);
-    echo json_encode([
-        "success"     => false, 
-        "message"     => "Error: " . $e->getMessage(),
-        "estudiantes" => [],
-        "alumnos"     => []
-    ]);
+    echo json_encode(["error" => $e->getMessage()]);
 }
 ?>

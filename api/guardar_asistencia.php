@@ -1,5 +1,4 @@
 <?php
-// Configuración de cabeceras CORS
 header_remove('Access-Control-Allow-Origin');
 header_remove('Access-Control-Allow-Headers');
 header_remove('Access-Control-Allow-Methods');
@@ -28,33 +27,6 @@ try {
     if (!isset($pdo) || !$pdo) {
         throw new Exception("Sin conexión a la base de datos.");
     }
-
-    // 1. Crear tablas con llaves foráneas correctas
-    $pdo->exec("CREATE TABLE IF NOT EXISTS secciones (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        nombre VARCHAR(100) UNIQUE NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS estudiantes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        nie VARCHAR(50) NOT NULL,
-        apellidos VARCHAR(100) NOT NULL,
-        nombres VARCHAR(100) NOT NULL,
-        seccion_id INT NOT NULL,
-        FOREIGN KEY (seccion_id) REFERENCES secciones(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS asistencia (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        estudiante_id INT NOT NULL,
-        fecha DATE NOT NULL,
-        estado VARCHAR(50) NOT NULL,
-        observacion VARCHAR(255) NULL,
-        FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id) ON DELETE CASCADE,
-        UNIQUE KEY unique_asistencia (estudiante_id, fecha)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-    try { $pdo->exec("ALTER TABLE asistencia ADD COLUMN observacion VARCHAR(255) NULL;"); } catch (Throwable $t) {}
 
     $rawInput = file_get_contents("php://input");
     $data = json_decode($rawInput, true);
@@ -86,7 +58,7 @@ try {
         $seccion_id = $pdo->lastInsertId();
     }
 
-    $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :val OR nie = :val LIMIT 1");
+    $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :id_val OR nie = :nie_val LIMIT 1");
     
     $stmtAutoCreateEst = $pdo->prepare("
         INSERT INTO estudiantes (nie, apellidos, nombres, seccion_id) 
@@ -102,53 +74,50 @@ try {
     ");
 
     $insertados = 0;
-    $timeNow = time();
 
     foreach ($items as $index => $val) {
         if (!is_array($val)) continue;
 
-        $rawNie = $val['nie'] ?? $val['NIE'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? $val['id'] ?? '';
-        $nieVal = trim((string)$rawNie);
+        // Búsqueda profunda de ID y NIE
+        $idVal = $val['id'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? null;
+        $nieVal = trim((string)($val['nie'] ?? $val['NIE'] ?? ''));
 
-        if ($nieVal === '') {
-            $idxNum = (int)$index + 1;
-            $nieVal = sprintf("TEMP-%d-%d", $idxNum, $timeNow);
-        }
-
-        $apellidos = trim((string)($val['apellidos'] ?? $val['APELLIDOS'] ?? 'Apellido'));
-        $nombres = trim((string)($val['nombres'] ?? $val['NOMBRES'] ?? 'Nombre'));
-        $estado = $val['estado'] ?? $val['ESTADO'] ?? 'Asistió';
+        $apellidos = trim((string)($val['apellidos'] ?? $val['APELLIDOS'] ?? $val['apellido'] ?? ''));
+        $nombres = trim((string)($val['nombres'] ?? $val['NOMBRES'] ?? $val['nombre'] ?? ''));
+        $estado = $val['estado'] ?? $val['ESTADO'] ?? $val['asistencia'] ?? 'Asistió';
         $observacion = $val['observacion'] ?? $val['inasistencia_por'] ?? $val['OBSERVACION'] ?? null;
 
         $realStudentId = null;
 
-        // 1. Buscar si el estudiante existe
+        // 1. Intentar buscar por ID o NIE existente
         try {
-            $stmtFindEst->execute([':val' => $nieVal]);
+            $stmtFindEst->execute([
+                ':id_val'  => $idVal ?? 0,
+                ':nie_val' => $nieVal !== '' ? $nieVal : '---'
+            ]);
             $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
             if ($est) {
                 $realStudentId = $est['id'];
             }
         } catch (Throwable $t) {}
 
-        // 2. Si no existe, crearlo
-        if (!$realStudentId) {
+        // 2. Si no se encontró, crear estudiante usando los nombres/apellidos recibidos
+        if (!$realStudentId && ($apellidos !== '' || $nombres !== '' || $nieVal !== '')) {
+            if ($nieVal === '') {
+                $nieVal = sprintf("NIE-%d-%d", (int)$index + 1, time());
+            }
             try {
                 $stmtAutoCreateEst->execute([
                     ':nie'        => $nieVal,
-                    ':apellidos'  => $apellidos !== '' ? $apellidos : 'Apellido',
-                    ':nombres'    => $nombres !== '' ? $nombres : 'Nombre',
+                    ':apellidos'  => $apellidos !== '' ? $apellidos : 'Sin Apellido',
+                    ':nombres'    => $nombres !== '' ? $nombres : 'Sin Nombre',
                     ':seccion_id' => $seccion_id
                 ]);
                 $realStudentId = $pdo->lastInsertId();
-            } catch (Throwable $t) {
-                $stmtFindEst->execute([':val' => $nieVal]);
-                $estRe = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
-                $realStudentId = $estRe['id'] ?? null;
-            }
+            } catch (Throwable $t) {}
         }
 
-        // 3. Registrar asistencia
+        // 3. Registrar o actualizar la asistencia
         if ($realStudentId) {
             try {
                 $stmtInsertAsis->execute([
