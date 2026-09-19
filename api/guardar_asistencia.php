@@ -50,7 +50,7 @@ try {
         fecha DATE NOT NULL,
         estado VARCHAR(50) NOT NULL,
         observacion VARCHAR(255) NULL,
-        FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id) ON DELETE CASCADE,
+        FOREIGN KEY (estudiante_id) REFERENCES secciones(id) ON DELETE CASCADE,
         UNIQUE KEY unique_asistencia (estudiante_id, fecha)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
@@ -73,7 +73,7 @@ try {
         exit();
     }
 
-    // Obtener o crear ID de sección por defecto
+    // Obtener o crear ID de sección
     $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE nombre = :nombre LIMIT 1");
     $stmtSec->execute([':nombre' => $seccion_nombre]);
     $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
@@ -102,14 +102,18 @@ try {
     ");
 
     $insertados = 0;
+    $timeNow = time();
 
     foreach ($items as $index => $val) {
         if (!is_array($val)) continue;
 
-        // Extraer NIE o construir una cadena concatenada correctamente
-        $nieVal = trim((string)($val['nie'] ?? $val['NIE'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? $val['id'] ?? ''));
+        // Formato seguro de NIE sin operadores + ambiguos
+        $rawNie = $val['nie'] ?? $val['NIE'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? $val['id'] ?? '';
+        $nieVal = trim((string)$rawNie);
+
         if ($nieVal === '') {
-            $nieVal = 'NIE-TEMP-' . ($index + 1) . '-' . time();
+            $idxNum = (int)$index + 1;
+            $nieVal = sprintf("TEMP-%d-%d", $idxNum, $timeNow);
         }
 
         $apellidos = trim((string)($val['apellidos'] ?? $val['APELLIDOS'] ?? 'Apellido'));
@@ -119,7 +123,7 @@ try {
 
         $realStudentId = null;
 
-        // 1. Buscar si el estudiante existe
+        // 1. Buscar estudiante
         try {
             $stmtFindEst->execute([':val' => $nieVal]);
             $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
@@ -128,7 +132,7 @@ try {
             }
         } catch (Throwable $t) {}
 
-        // 2. Si no existe, crearlo
+        // 2. Crear estudiante si no existe
         if (!$realStudentId) {
             try {
                 $stmtAutoCreateEst->execute([
@@ -145,7 +149,7 @@ try {
             }
         }
 
-        // 3. Insertar registro de asistencia
+        // 3. Registrar asistencia
         if ($realStudentId) {
             try {
                 $stmtInsertAsis->execute([
