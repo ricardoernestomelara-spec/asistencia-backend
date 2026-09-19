@@ -54,12 +54,10 @@ try {
         UNIQUE KEY unique_asistencia (estudiante_id, fecha)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
-    // 2. Agregar la columna 'observacion' a la tabla asistencia si ya existía sin ella
+    // Alter table para añadir columna observacion si la tabla ya existía de antes
     try {
         $pdo->exec("ALTER TABLE asistencia ADD COLUMN observacion VARCHAR(255) NULL;");
-    } catch (Throwable $ignored) {
-        // La columna ya existe, ignorar excepción
-    }
+    } catch (Throwable $ignored) {}
 
     $data = json_decode(file_get_contents("php://input"), true);
 
@@ -115,10 +113,13 @@ try {
     foreach ($items as $key => $val) {
         if (!is_array($val)) continue;
 
-        $identificador = $val['estudiante_id'] ?? $val['id'] ?? $val['nie'] ?? null;
-        $nie = $val['nie'] ?? ($identificador ? (string)$identificador : 'NIE-' . rand(10000, 99999));
-        $apellidos = $val['apellidos'] ?? 'Apellido';
-        $nombres = $val['nombres'] ?? 'Nombre';
+        $identificador = $val['estudiante_id'] ?? $val['id'] ?? $val['nie'] ?? $val['NIE'] ?? null;
+        
+        // Garantizar que 'nie' jamás sea NULL
+        $nieVal = !empty($val['nie']) ? $val['nie'] : (!empty($val['NIE']) ? $val['NIE'] : ($identificador ? (string)$identificador : 'NIE-' . rand(10000, 99999)));
+        
+        $apellidos = !empty($val['apellidos']) ? $val['apellidos'] : (!empty($val['APELLIDOS']) ? $val['APELLIDOS'] : 'Apellido');
+        $nombres = !empty($val['nombres']) ? $val['nombres'] : (!empty($val['NOMBRES']) ? $val['NOMBRES'] : 'Nombre');
         $estado = $val['estado'] ?? 'Asistió';
         $observacion = $val['observacion'] ?? $val['inasistencia_por'] ?? null;
 
@@ -134,7 +135,7 @@ try {
 
         if (!$realStudentId) {
             $stmtAutoCreateEst->execute([
-                ':nie'        => $nie,
+                ':nie'        => $nieVal,
                 ':apellidos'  => $apellidos,
                 ':nombres'    => $nombres,
                 ':seccion_id' => $seccion_id
@@ -142,7 +143,7 @@ try {
             $realStudentId = $pdo->lastInsertId();
 
             if (!$realStudentId) {
-                $stmtFindEst->execute([':val' => $nie]);
+                $stmtFindEst->execute([':val' => $nieVal]);
                 $estRe = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
                 $realStudentId = $estRe['id'] ?? null;
             }
