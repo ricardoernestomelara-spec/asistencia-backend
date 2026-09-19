@@ -29,7 +29,7 @@ try {
         throw new Exception("Sin conexión a la base de datos.");
     }
 
-    // 1. Asegurar tablas
+    // 1. Crear tablas si no existen
     $pdo->exec("CREATE TABLE IF NOT EXISTS secciones (
         id INT AUTO_INCREMENT PRIMARY KEY,
         nombre VARCHAR(100) UNIQUE NOT NULL
@@ -106,7 +106,7 @@ try {
     foreach ($items as $index => $val) {
         if (!is_array($val)) continue;
 
-        // Extraer NIE o construir uno dinámico si viene vacío
+        // Extraer NIE o construir una cadena concatenada correctamente
         $nieVal = trim((string)($val['nie'] ?? $val['NIE'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? $val['id'] ?? ''));
         if ($nieVal === '') {
             $nieVal = 'NIE-TEMP-' . ($index + 1) . '-' . time();
@@ -128,7 +128,7 @@ try {
             }
         } catch (Throwable $t) {}
 
-        // 2. Si no existe, crearlo capturando errores aislados
+        // 2. Si no existe, crearlo
         if (!$realStudentId) {
             try {
                 $stmtAutoCreateEst->execute([
@@ -139,7 +139,6 @@ try {
                 ]);
                 $realStudentId = $pdo->lastInsertId();
             } catch (Throwable $t) {
-                // Si falla por duplicados u otro motivo, re-intentar búsqueda
                 $stmtFindEst->execute([':val' => $nieVal]);
                 $estRe = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
                 $realStudentId = $estRe['id'] ?? null;
