@@ -43,7 +43,7 @@ try {
         }
     }
 
-    // 2. Consulta JOIN entre estudiantes y la última asistencia registrada o la de la fecha
+    // 2. Consulta JOIN
     if ($seccion_id) {
         $sql = "
             SELECT 
@@ -89,9 +89,9 @@ try {
 
     $resultado = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Mapeo con todas las variaciones de nombres de campo que React suele leer
+    // Mapear filas con todas las propiedades probables para las columnas del Frontend
     $alumnos = array_map(function($row) {
-        $estadoVal = $row['estado'] !== null ? $row['estado'] : '--';
+        $estadoVal = ($row['estado'] !== null && $row['estado'] !== '') ? $row['estado'] : '--';
         return [
             'id'                => (int)$row['id'],
             'estudiante_id'     => (int)$row['estudiante_id'],
@@ -100,7 +100,7 @@ try {
             'apellidos'         => $row['apellidos'] ?? '',
             'APELLIDOS'         => $row['apellidos'] ?? '',
             'nombres'           => $row['nombres'] ?? '',
-            'NOMBRES'           => $row['NOMBRES'] ?? $row['nombres'] ?? '',
+            'NOMBRES'           => $row['nombres'] ?? '',
             'estado'            => $estadoVal,
             'ESTADO'            => $estadoVal,
             'asistencia'        => $estadoVal,
@@ -114,11 +114,25 @@ try {
         ];
     }, $resultado);
 
-    // Responder como Arreglo Plano directo para compatibilidad total con iteradores React .map()
-    echo json_encode($alumnos);
+    // Estructura envolvente para compatibilidad total con React/Axios
+    $response = [
+        'success'     => true,
+        'status'      => 'success',
+        'data'        => $alumnos,
+        'alumnos'     => $alumnos,
+        'estudiantes' => $alumnos,
+        'datos'       => $alumnos,
+        'rows'        => $alumnos
+    ];
+
+    echo json_encode($response);
 
 } catch (Throwable $e) {
     http_response_code(200);
-    echo json_encode([]);
+    echo json_encode([
+        'success' => false,
+        'data'    => [],
+        'alumnos' => []
+    ]);
 }
 ?>
