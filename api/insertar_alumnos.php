@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/conexion.php';
+require_once __DIR__ . '/../conexion.php';
 
 if (!isset($pdo) && isset($conn)) {
     $pdo = $conn;
@@ -25,7 +25,7 @@ try {
     }
 
     $seccion_id = $seccion['id'];
-    echo "Insertando alumnos en la sección: " . $seccion['nombre'] . " (ID: $seccion_id)...\n";
+    echo "Insertando alumnos en la sección: " . $seccion['nombre'] . " (ID: $seccion_id)...<br>";
 
     // 3. Alumnos de prueba a registrar
     $alumnosPrueba = [
@@ -50,9 +50,9 @@ try {
         ]);
     }
 
-    echo "¡Alumnos insertados con éxito en la base de datos de Aiven!\n";
+    echo "<b>¡Alumnos insertados con éxito en la base de datos de Aiven!</b>";
 
 } catch (Exception $e) {
-    echo "Error al insertar alumnos: " . $e->getMessage() . "\n";
+    echo "Error al insertar alumnos: " . $e->getMessage();
 }
 ?>
