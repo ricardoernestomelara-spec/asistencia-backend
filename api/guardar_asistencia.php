@@ -29,7 +29,7 @@ try {
         throw new Exception("Sin conexión a la base de datos.");
     }
 
-    // 1. Crear tablas si no existen
+    // 1. Crear tablas con llaves foráneas correctas
     $pdo->exec("CREATE TABLE IF NOT EXISTS secciones (
         id INT AUTO_INCREMENT PRIMARY KEY,
         nombre VARCHAR(100) UNIQUE NOT NULL
@@ -50,7 +50,7 @@ try {
         fecha DATE NOT NULL,
         estado VARCHAR(50) NOT NULL,
         observacion VARCHAR(255) NULL,
-        FOREIGN KEY (estudiante_id) REFERENCES secciones(id) ON DELETE CASCADE,
+        FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id) ON DELETE CASCADE,
         UNIQUE KEY unique_asistencia (estudiante_id, fecha)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
 
@@ -107,7 +107,6 @@ try {
     foreach ($items as $index => $val) {
         if (!is_array($val)) continue;
 
-        // Formato seguro de NIE sin operadores + ambiguos
         $rawNie = $val['nie'] ?? $val['NIE'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? $val['id'] ?? '';
         $nieVal = trim((string)$rawNie);
 
@@ -123,7 +122,7 @@ try {
 
         $realStudentId = null;
 
-        // 1. Buscar estudiante
+        // 1. Buscar si el estudiante existe
         try {
             $stmtFindEst->execute([':val' => $nieVal]);
             $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
@@ -132,7 +131,7 @@ try {
             }
         } catch (Throwable $t) {}
 
-        // 2. Crear estudiante si no existe
+        // 2. Si no existe, crearlo
         if (!$realStudentId) {
             try {
                 $stmtAutoCreateEst->execute([
