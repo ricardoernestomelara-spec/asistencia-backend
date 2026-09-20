@@ -3,7 +3,7 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Incluir conexión ubicada en la raíz
+// Incluir conexión desde la raíz
 require_once '../conexion.php'; // cite: 1, 2
 
 $seccion = $_GET['seccion'] ?? '';
@@ -17,9 +17,26 @@ if (empty($seccion)) {
 }
 
 try {
-    // Si viene "1° A Software", preparamos el término para buscar también "1° A Desarrollo de Software"
+    // 1. Crear la tabla de asistencias automáticamente si no existe en MySQL
+    $sqlCrearTabla = "CREATE TABLE IF NOT EXISTS asistencias (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        estudiante_id INT NOT NULL,
+        fecha DATE NOT NULL,
+        asignatura VARCHAR(100) NOT NULL,
+        periodo VARCHAR(20) NOT NULL,
+        estado VARCHAR(20) NOT NULL DEFAULT 'Asistió',
+        inasistencia_por VARCHAR(100) DEFAULT NULL,
+        observacion TEXT DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_estudiante_fecha (estudiante_id, fecha)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
+
+    $pdo->exec($sqlCrearTabla); // cite: 1, 2
+
+    // 2. Preparar el término de búsqueda flexible para la sección
     $seccionBusqueda = '%' . str_replace('Software', '%', $seccion) . '%';
 
+    // 3. Consulta de estudiantes con LEFT JOIN a la tabla asistencias
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
