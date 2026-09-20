@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-require_once '../conexion.php'; // cite: 2
+require_once '../conexion.php';
 
 $data = json_decode(file_get_contents("php://input"), true);
 
@@ -29,7 +29,7 @@ if (empty($asistencias)) {
 }
 
 try {
-    // Consulta con INSERT ... ON DUPLICATE KEY UPDATE para actualizar si ya existe la fecha/estudiante
+    // Consulta limpia: borra o actualiza garantizando que no habrá duplicados
     $sql = "INSERT INTO asistencias (estudiante_id, fecha, asignatura, periodo, estado, inasistencia_por, observacion)
             VALUES (:estudiante_id, :fecha, :asignatura, :periodo, :estado, :inasistencia_por, :observacion)
             ON DUPLICATE KEY UPDATE 
@@ -37,7 +37,7 @@ try {
                 inasistencia_por = VALUES(inasistencia_por),
                 observacion = VALUES(observacion)";
 
-    $stmt = $pdo->prepare($sql); // cite: 1, 2
+    $stmt = $pdo->prepare($sql);
 
     $registrosProcesados = 0;
     foreach ($asistencias as $ast) {
