@@ -4,7 +4,8 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json; charset=UTF-8");
 
-require_once __DIR__ . '/conexion.php';
+// Subir un nivel para encontrar conexion.php en la raíz
+require_once __DIR__ . '/../conexion.php';
 
 $seccion = $_GET['seccion'] ?? '';
 $asignatura_id = $_GET['asignatura_id'] ?? '';
