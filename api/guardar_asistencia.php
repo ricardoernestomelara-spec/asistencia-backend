@@ -31,10 +31,6 @@ try {
         $pdo = $conn;
     }
 
-    if (!isset($pdo) || !$pdo) {
-        throw new Exception("Sin conexión a la base de datos.");
-    }
-
     $rawInput = file_get_contents("php://input");
     $data = json_decode($rawInput, true);
 
@@ -44,8 +40,6 @@ try {
     }
 
     $fecha = $data['fecha'] ?? date('Y-m-d');
-    $seccion_nombre = $data['seccion'] ?? $data['seccion_nombre'] ?? '';
-    
     $items = $data['detalles'] ?? $data['asistencias'] ?? $data['alumnos'] ?? $data['estudiantes'] ?? $data['datos'] ?? $data;
 
     if (!is_array($items) || empty($items)) {
@@ -53,7 +47,7 @@ try {
         exit();
     }
 
-    // Determinar nombre de la tabla
+    // Determinar tabla
     $nombreTabla = "asistencia";
     try {
         $pdo->query("SELECT 1 FROM asistencia LIMIT 1");
@@ -61,19 +55,21 @@ try {
         $nombreTabla = "asistencias";
     }
 
-    // Preparar guardado con actualización si ya existe el registro para ese alumno y fecha
-    $stmtInsertAsis = $pdo->prepare("
+    // Sentencias explícitas de UPDATE e INSERT
+    $stmtUpdate = $pdo->prepare("
+        UPDATE {$nombreTabla} 
+        SET estado = :estado, observacion = :observacion, inasistencia_por = :inasistencia_por 
+        WHERE estudiante_id = :estudiante_id AND fecha = :fecha
+    ");
+
+    $stmtInsert = $pdo->prepare("
         INSERT INTO {$nombreTabla} (estudiante_id, fecha, estado, observacion, inasistencia_por) 
         VALUES (:estudiante_id, :fecha, :estado, :observacion, :inasistencia_por)
-        ON DUPLICATE KEY UPDATE 
-            estado = VALUES(estado),
-            observacion = VALUES(observacion),
-            inasistencia_por = VALUES(inasistencia_por)
     ");
 
     $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :id_val OR nie = :nie_val LIMIT 1");
 
-    $insertados = 0;
+    $procesados = 0;
 
     foreach ($items as $index => $val) {
         if (!is_array($val)) continue;
@@ -81,13 +77,11 @@ try {
         $idVal = $val['id'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? null;
         $nieVal = trim((string)($val['nie'] ?? $val['NIE'] ?? ''));
         $estado = $val['estado'] ?? $val['ESTADO'] ?? $val['asistencia'] ?? 'Asistió';
-        
         $observacion = $val['observacion'] ?? $val['OBSERVACION'] ?? null;
         $inasistencia_por = $val['inasistencia_por'] ?? $val['motivo'] ?? null;
 
         $realStudentId = null;
 
-        // Buscar el ID real del estudiante
         if ($idVal) {
             $realStudentId = $idVal;
         } else if ($nieVal !== '') {
@@ -98,28 +92,38 @@ try {
             } catch (Throwable $t) {}
         }
 
-        // Registrar o actualizar
         if ($realStudentId) {
-            try {
-                $stmtInsertAsis->execute([
-                    ':estudiante_id'    => $realStudentId,
-                    ':fecha'            => $fecha,
-                    ':estado'           => $estado,
-                    ':observacion'      => $observacion,
-                    ':inasistencia_por' => $inasistencia_por
-                ]);
-                $insertados++;
-            } catch (Throwable $t) {}
+            // Intenta actualizar
+            $stmtUpdate->execute([
+                ':estado'           => $estado,
+                ':observacion'      => $observacion,
+                ':inasistencia_por' => $inasistencia_por,
+                ':estudiante_id'    => $realStudentId,
+                ':fecha'            => $fecha
+            ]);
+
+            // Si no afectó ninguna fila, inserta el nuevo registro
+            if ($stmtUpdate->rowCount() === 0) {
+                try {
+                    $stmtInsert->execute([
+                        ':estudiante_id'    => $realStudentId,
+                        ':fecha'            => $fecha,
+                        ':estado'           => $estado,
+                        ':observacion'      => $observacion,
+                        ':inasistencia_por' => $inasistencia_por
+                    ]);
+                } catch (Throwable $t) {}
+            }
+            $procesados++;
         }
     }
 
     echo json_encode([
         "success" => true, 
-        "message" => "Asistencia guardada correctamente ($insertados registros procesados)."
+        "message" => "Asistencia procesada correctamente ($procesados registros)."
     ]);
 
 } catch (Throwable $e) {
-    http_response_code(200);
-    echo json_encode(["success" => false, "message" => "Error al guardar asistencia: " . $e->getMessage()]);
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }
 ?>
