@@ -44,13 +44,6 @@ try {
 
     $pdo->exec($sqlCrearTabla);
 
-    // Intentar agregar el índice único para evitar duplicados en la base de datos
-    try {
-        $pdo->exec("ALTER TABLE asistencias ADD UNIQUE KEY uq_estudiante_asistencia (estudiante_id, fecha, asignatura, periodo)");
-    } catch (Throwable $ignored) {
-        // Ignora si el índice ya existe
-    }
-
     // 2. Buscar el seccion_id correspondiente
     $seccion_id = null;
     if (is_numeric($seccionInput)) {
@@ -69,8 +62,9 @@ try {
         exit();
     }
 
-    // 3. Consulta limpia: obtiene los estudiantes de la sección de forma DISTINCT para evitar multiplicaciones
-    $sql = "SELECT DISTINCT
+    // 3. Consulta con SUBQUERY que agrupa por NIE único
+    // Esto garantiza que aunque el alumno esté duplicado en la tabla 'estudiantes', solo devuelva 1 fila por NIE.
+    $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
                 e.apellidos,
@@ -81,6 +75,13 @@ try {
                 ult_asistencia.inasistencia_por,
                 ult_asistencia.observacion
             FROM estudiantes e
+            INNER JOIN (
+                /* Selecciona solo el ID mínimo por cada NIE para descartar estudiantes duplicados */
+                SELECT MIN(id) AS min_id
+                FROM estudiantes
+                WHERE seccion_id = :seccion_id
+                GROUP BY nie
+            ) e_unicos ON e.id = e_unicos.min_id
             LEFT JOIN (
                 SELECT a1.*
                 FROM asistencias a1
@@ -93,7 +94,6 @@ try {
                     GROUP BY estudiante_id
                 ) a2 ON a1.id = a2.max_id
             ) ult_asistencia ON e.id = ult_asistencia.estudiante_id
-            WHERE e.seccion_id = :seccion_id
             ORDER BY e.apellidos ASC, e.nombres ASC";
 
     $stmt = $pdo->prepare($sql);
@@ -112,3 +112,4 @@ try {
     http_response_code(200);
     echo json_encode(["error" => "Error en la consulta: " . $e->getMessage()]);
 }
+?>
