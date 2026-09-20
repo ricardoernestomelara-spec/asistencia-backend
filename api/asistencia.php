@@ -11,7 +11,7 @@ $periodo = $_GET['periodo'] ?? '';
 $fecha = $_GET['fecha'] ?? date('Y-m-d');
 
 try {
-    // 1. Crear automáticamente la tabla de asistencias si no existe
+    // 1. Asegurar la tabla de asistencias
     $sqlCrearTabla = "CREATE TABLE IF NOT EXISTS asistencias (
         id INT AUTO_INCREMENT PRIMARY KEY,
         estudiante_id INT NOT NULL,
@@ -27,33 +27,7 @@ try {
 
     $pdo->exec($sqlCrearTabla); // cite: 1, 2
 
-    // 2. Verificar los nombres reales de las columnas en la tabla 'estudiantes'
-    $columnasStmt = $pdo->query("SHOW COLUMNS FROM estudiantes");
-    $columnas = $columnasStmt->fetchAll(PDO::FETCH_COLUMN);
-
-    // Identificar si existe alguna columna asociada a la sección/grado
-    $columnaSeccion = null;
-    foreach (['seccion', 'seccion_id', 'grado', 'curso', 'grupo'] as $col) {
-        if (in_array($col, $columnas)) {
-            $columnaSeccion = $col;
-            break;
-        }
-    }
-
-    // 3. Construir la consulta dinámicamente según las columnas existentes
-    $whereClause = "";
-    $params = [
-        ':fecha' => $fecha, // cite: 1
-        ':asignatura' => $asignatura, // cite: 1
-        ':periodo' => $periodo // cite: 1
-    ];
-
-    if ($columnaSeccion && !empty($seccion)) {
-        $seccionBusqueda = '%' . str_replace('Software', '%', $seccion) . '%';
-        $whereClause = "WHERE e.{$columnaSeccion} LIKE :seccion";
-        $params[':seccion'] = $seccionBusqueda;
-    }
-
+    // 2. Consulta limpia de estudiantes sin filtros bloqueantes
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -69,11 +43,14 @@ try {
                 AND a.fecha = :fecha 
                 AND a.asignatura = :asignatura 
                 AND a.periodo = :periodo
-            {$whereClause}
             ORDER BY e.apellidos ASC"; // cite: 1
 
     $stmt = $pdo->prepare($sql); // cite: 1, 2
-    $stmt->execute($params);
+    $stmt->execute([
+        ':fecha' => $fecha, // cite: 1
+        ':asignatura' => $asignatura, // cite: 1
+        ':periodo' => $periodo // cite: 1
+    ]);
 
     $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC); // cite: 1
 
