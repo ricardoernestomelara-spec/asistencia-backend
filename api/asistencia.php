@@ -4,12 +4,10 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Subir un nivel para encontrar conexion.php en la raíz
 require_once __DIR__ . '/../conexion.php';
 
 $seccion = $_GET['seccion'] ?? '';
-$asignatura_id = $_GET['asignatura_id'] ?? '';
-$periodo_id = $_GET['periodo_id'] ?? '';
+$fecha = $_GET['fecha'] ?? date('Y-m-d');
 
 if (empty($seccion)) {
     echo json_encode([]);
@@ -21,7 +19,7 @@ try {
         $pdo = $conn;
     }
 
-    // Traer TODOS los estudiantes de la sección, cruzar asistencia si existe, y agrupar para evitar duplicados
+    // Traer TODOS los estudiantes de la sección y cruzar su estado de asistencia para la fecha seleccionada
     $query = "
         SELECT 
             e.id AS estudiante_id,
@@ -29,24 +27,22 @@ try {
             e.apellidos,
             e.nombres,
             s.nombre AS seccion,
-            COALESCE(MAX(a.estado), 'Asistió') AS estado_asistencia
+            COALESCE(a.estado, 'Asistió') AS estado_asistencia
         FROM estudiantes e
         INNER JOIN secciones s ON e.seccion_id = s.id
         LEFT JOIN asistencia a 
             ON e.id = a.estudiante_id 
-            AND (:asignatura_id = '' OR a.asignatura_id = :asignatura_id)
-            AND (:periodo_id = '' OR a.periodo_id = :periodo_id)
+            AND DATE(a.fecha) = :fecha
         WHERE s.nombre = :seccion
           AND e.nie NOT LIKE 'TEMP-%'
-        GROUP BY e.id, e.nie, e.apellidos, e.nombres, s.nombre
+        GROUP BY e.id, e.nie, e.apellidos, e.nombres, s.nombre, a.estado
         ORDER BY e.apellidos ASC, e.nombres ASC
     ";
 
     $stmt = $pdo->prepare($query);
     $stmt->execute([
         ':seccion' => $seccion,
-        ':asignatura_id' => $asignatura_id,
-        ':periodo_id' => $periodo_id
+        ':fecha' => $fecha
     ]);
 
     $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC);
