@@ -44,9 +44,8 @@ try {
     }
 
     $fecha = $data['fecha'] ?? date('Y-m-d');
-    $seccion_nombre = $data['seccion'] ?? $data['seccion_nombre'] ?? '1° A Software';
+    $seccion_nombre = $data['seccion'] ?? $data['seccion_nombre'] ?? '';
     
-    // Captura flexible de la lista de asistencias enviada por el frontend/modal
     $items = $data['detalles'] ?? $data['asistencias'] ?? $data['alumnos'] ?? $data['estudiantes'] ?? $data['datos'] ?? $data;
 
     if (!is_array($items) || empty($items)) {
@@ -54,27 +53,7 @@ try {
         exit();
     }
 
-    // Obtener o crear ID de la sección
-    $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE nombre = :nombre LIMIT 1");
-    $stmtSec->execute([':nombre' => $seccion_nombre]);
-    $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
-
-    if ($sec) {
-        $seccion_id = $sec['id'];
-    } else {
-        $stmtInsSec = $pdo->prepare("INSERT INTO secciones (nombre) VALUES (:nombre)");
-        $stmtInsSec->execute([':nombre' => $seccion_nombre]);
-        $seccion_id = $pdo->lastInsertId();
-    }
-
-    $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :id_val OR nie = :nie_val LIMIT 1");
-    
-    $stmtAutoCreateEst = $pdo->prepare("
-        INSERT INTO estudiantes (nie, apellidos, nombres, seccion_id) 
-        VALUES (:nie, :apellidos, :nombres, :seccion_id)
-    ");
-
-    // Sentencia para guardar/actualizar asistencias (cubre nombres de tabla 'asistencia' o 'asistencias')
+    // Determinar nombre de la tabla
     $nombreTabla = "asistencia";
     try {
         $pdo->query("SELECT 1 FROM asistencia LIMIT 1");
@@ -82,6 +61,7 @@ try {
         $nombreTabla = "asistencias";
     }
 
+    // Preparar guardado con actualización si ya existe el registro para ese alumno y fecha
     $stmtInsertAsis = $pdo->prepare("
         INSERT INTO {$nombreTabla} (estudiante_id, fecha, estado, observacion, inasistencia_por) 
         VALUES (:estudiante_id, :fecha, :estado, :observacion, :inasistencia_por)
@@ -91,17 +71,15 @@ try {
             inasistencia_por = VALUES(inasistencia_por)
     ");
 
+    $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :id_val OR nie = :nie_val LIMIT 1");
+
     $insertados = 0;
 
     foreach ($items as $index => $val) {
         if (!is_array($val)) continue;
 
-        // Búsqueda profunda de ID y NIE
         $idVal = $val['id'] ?? $val['estudiante_id'] ?? $val['id_estudiante'] ?? null;
         $nieVal = trim((string)($val['nie'] ?? $val['NIE'] ?? ''));
-
-        $apellidos = trim((string)($val['apellidos'] ?? $val['APELLIDOS'] ?? $val['apellido'] ?? ''));
-        $nombres = trim((string)($val['nombres'] ?? $val['NOMBRES'] ?? $val['nombre'] ?? ''));
         $estado = $val['estado'] ?? $val['ESTADO'] ?? $val['asistencia'] ?? 'Asistió';
         
         $observacion = $val['observacion'] ?? $val['OBSERVACION'] ?? null;
@@ -109,35 +87,18 @@ try {
 
         $realStudentId = null;
 
-        // 1. Intentar buscar por ID o NIE existente
-        try {
-            $stmtFindEst->execute([
-                ':id_val'  => $idVal ?? 0,
-                ':nie_val' => $nieVal !== '' ? $nieVal : '---'
-            ]);
-            $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
-            if ($est) {
-                $realStudentId = $est['id'];
-            }
-        } catch (Throwable $t) {}
-
-        // 2. Si no se encontró, crear estudiante usando nombres y apellidos
-        if (!$realStudentId && ($apellidos !== '' || $nombres !== '' || $nieVal !== '')) {
-            if ($nieVal === '') {
-                $nieVal = sprintf("NIE-%d-%d", (int)$index + 1, time());
-            }
+        // Buscar el ID real del estudiante
+        if ($idVal) {
+            $realStudentId = $idVal;
+        } else if ($nieVal !== '') {
             try {
-                $stmtAutoCreateEst->execute([
-                    ':nie'        => $nieVal,
-                    ':apellidos'  => $apellidos !== '' ? $apellidos : 'Sin Apellido',
-                    ':nombres'    => $nombres !== '' ? $nombres : 'Sin Nombre',
-                    ':seccion_id' => $seccion_id
-                ]);
-                $realStudentId = $pdo->lastInsertId();
+                $stmtFindEst->execute([':id_val' => 0, ':nie_val' => $nieVal]);
+                $est = $stmtFindEst->fetch(PDO::FETCH_ASSOC);
+                if ($est) $realStudentId = $est['id'];
             } catch (Throwable $t) {}
         }
 
-        // 3. Registrar o actualizar la asistencia
+        // Registrar o actualizar
         if ($realStudentId) {
             try {
                 $stmtInsertAsis->execute([

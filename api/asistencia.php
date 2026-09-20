@@ -32,11 +32,11 @@ try {
         $pdo = $conn;
     }
 
-    // Consulta para obtener la lista de estudiantes según la sección solicitada
+    // 1. Obtener la lista de estudiantes según la sección solicitada
     $query = "
         SELECT 
-            MIN(e.id) AS id,
-            MIN(e.id) AS estudiante_id,
+            e.id AS id,
+            e.id AS estudiante_id,
             e.nie,
             e.apellidos,
             e.nombres,
@@ -46,7 +46,6 @@ try {
         INNER JOIN secciones s ON e.seccion_id = s.id
         WHERE TRIM(s.nombre) = TRIM(:seccion)
           AND e.nie NOT LIKE 'TEMP-%'
-        GROUP BY e.nie, e.apellidos, e.nombres, s.nombre
         ORDER BY e.apellidos ASC, e.nombres ASC
     ";
 
@@ -54,32 +53,44 @@ try {
     $stmt->execute([':seccion' => $seccion]);
     $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Consulta adicional para cruzar si ya existe asistencia registrada para la fecha
-    $asistenciaQuery = "
-        SELECT estudiante_id, estado 
-        FROM asistencias 
-        WHERE fecha = :fecha 
-          AND seccion = :seccion
-    ";
-    
-    $asistenciaMapa = [];
+    // Detectar dinámicamente si la tabla se llama 'asistencia' o 'asistencias'
+    $nombreTabla = "asistencia";
     try {
-        $stmtAsig = $pdo->prepare($asistenciaQuery);
-        $stmtAsig->execute([':fecha' => $fecha, ':seccion' => $seccion]);
-        while ($row = $stmtAsig->fetch(PDO::FETCH_ASSOC)) {
-            $asistenciaMapa[$row['estudiante_id']] = $row['estado'];
+        $pdo->query("SELECT 1 FROM asistencia LIMIT 1");
+    } catch (Throwable $t) {
+        $nombreTabla = "asistencias";
+    }
+
+    // 2. Consultar la asistencia registrada para esos alumnos en la fecha dada
+    $asistenciaMapa = [];
+    if (!empty($estudiantes)) {
+        $ids = array_column($estudiantes, 'id');
+        $inQuery = implode(',', array_fill(0, count($ids), '?'));
+
+        $asistenciaQuery = "
+            SELECT estudiante_id, estado 
+            FROM {$nombreTabla} 
+            WHERE fecha = ? AND estudiante_id IN ($inQuery)
+        ";
+        
+        try {
+            $stmtAsig = $pdo->prepare($asistenciaQuery);
+            $stmtAsig->execute(array_merge([$fecha], $ids));
+            while ($row = $stmtAsig->fetch(PDO::FETCH_ASSOC)) {
+                $asistenciaMapa[$row['estudiante_id']] = $row['estado'];
+            }
+        } catch (Exception $ex) {
+            // Si hay error en la tabla, continuará con el valor predeterminado
         }
-    } catch (Exception $ex) {
-        // En caso de que la tabla de asistencias no exista aún o la consulta falle
     }
 
-    // Unificar estado de asistencia por estudiante
+    // 3. Mapear los datos al objeto final
     foreach ($estudiantes as &$est) {
-        $est['asistencia'] = $asistenciaMapa[$est['id']] ?? 'Asistió';
-        $est['estado'] = $est['asistencia'];
+        $estadoReal = $asistenciaMapa[$est['id']] ?? 'Asistió';
+        $est['asistencia'] = $estadoReal;
+        $est['estado'] = $estadoReal;
     }
 
-    // Retorno estructurado para el componente React TablaAsistencia.jsx
     echo json_encode([
         'success' => true,
         'alumnos' => $estudiantes,
