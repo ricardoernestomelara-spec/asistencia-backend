@@ -29,7 +29,7 @@ $periodo      = $_GET['periodo'] ?? '';
 $fecha        = $_GET['fecha'] ?? date('Y-m-d');
 
 try {
-    // 1. Crear tabla asistencias con el ÍNDICE ÚNICO que evita duplicados
+    // 1. Crear tabla asistencias si no existe
     $sqlCrearTabla = "CREATE TABLE IF NOT EXISTS asistencias (
         id INT AUTO_INCREMENT PRIMARY KEY,
         estudiante_id INT NOT NULL,
@@ -39,17 +39,16 @@ try {
         estado VARCHAR(20) NOT NULL DEFAULT 'Asistió',
         inasistencia_por VARCHAR(100) DEFAULT NULL,
         observacion TEXT DEFAULT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_estudiante_asistencia (estudiante_id, fecha, asignatura, periodo)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
     $pdo->exec($sqlCrearTabla);
 
-    // Intentar agregar el índice único en caso de que la tabla ya existiera antes sin él
+    // Intentar agregar el índice único para evitar duplicados en la base de datos
     try {
         $pdo->exec("ALTER TABLE asistencias ADD UNIQUE KEY uq_estudiante_asistencia (estudiante_id, fecha, asignatura, periodo)");
     } catch (Throwable $ignored) {
-        // Si el índice ya existe, ignora el error de forma segura
+        // Ignora si el índice ya existe
     }
 
     // 2. Buscar el seccion_id correspondiente
@@ -70,8 +69,8 @@ try {
         exit();
     }
 
-    // 3. Filtrar estudiantes ÚNICOS agrupando por estudiante id
-    $sql = "SELECT 
+    // 3. Consulta limpia: obtiene los estudiantes de la sección de forma DISTINCT para evitar multiplicaciones
+    $sql = "SELECT DISTINCT
                 e.id AS estudiante_id,
                 e.nie,
                 e.apellidos,
@@ -95,7 +94,6 @@ try {
                 ) a2 ON a1.id = a2.max_id
             ) ult_asistencia ON e.id = ult_asistencia.estudiante_id
             WHERE e.seccion_id = :seccion_id
-            GROUP BY e.id
             ORDER BY e.apellidos ASC, e.nombres ASC";
 
     $stmt = $pdo->prepare($sql);
@@ -114,4 +112,3 @@ try {
     http_response_code(200);
     echo json_encode(["error" => "Error en la consulta: " . $e->getMessage()]);
 }
-?>
