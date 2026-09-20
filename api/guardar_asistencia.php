@@ -47,7 +47,7 @@ try {
         exit();
     }
 
-    // Determinar tabla
+    // 1. Determinar nombre de tabla
     $nombreTabla = "asistencia";
     try {
         $pdo->query("SELECT 1 FROM asistencia LIMIT 1");
@@ -55,17 +55,39 @@ try {
         $nombreTabla = "asistencias";
     }
 
-    // Sentencias explícitas de UPDATE e INSERT
-    $stmtUpdate = $pdo->prepare("
-        UPDATE {$nombreTabla} 
-        SET estado = :estado, observacion = :observacion, inasistencia_por = :inasistencia_por 
-        WHERE estudiante_id = :estudiante_id AND fecha = :fecha
-    ");
+    // 2. Verificar si la columna 'inasistencia_por' existe en la base de datos
+    $tieneInasistenciaPor = false;
+    try {
+        $checkCol = $pdo->query("SHOW COLUMNS FROM {$nombreTabla} LIKE 'inasistencia_por'");
+        if ($checkCol && $checkCol->rowCount() > 0) {
+            $tieneInasistenciaPor = true;
+        }
+    } catch (Throwable $t) {}
 
-    $stmtInsert = $pdo->prepare("
-        INSERT INTO {$nombreTabla} (estudiante_id, fecha, estado, observacion, inasistencia_por) 
-        VALUES (:estudiante_id, :fecha, :estado, :observacion, :inasistencia_por)
-    ");
+    // 3. Preparar sentencias dinámicas según las columnas reales existentes
+    if ($tieneInasistenciaPor) {
+        $stmtUpdate = $pdo->prepare("
+            UPDATE {$nombreTabla} 
+            SET estado = :estado, observacion = :observacion, inasistencia_por = :inasistencia_por 
+            WHERE estudiante_id = :estudiante_id AND fecha = :fecha
+        ");
+
+        $stmtInsert = $pdo->prepare("
+            INSERT INTO {$nombreTabla} (estudiante_id, fecha, estado, observacion, inasistencia_por) 
+            VALUES (:estudiante_id, :fecha, :estado, :observacion, :inasistencia_por)
+        ");
+    } else {
+        $stmtUpdate = $pdo->prepare("
+            UPDATE {$nombreTabla} 
+            SET estado = :estado, observacion = :observacion 
+            WHERE estudiante_id = :estudiante_id AND fecha = :fecha
+        ");
+
+        $stmtInsert = $pdo->prepare("
+            INSERT INTO {$nombreTabla} (estudiante_id, fecha, estado, observacion) 
+            VALUES (:estudiante_id, :fecha, :estado, :observacion)
+        ");
+    }
 
     $stmtFindEst = $pdo->prepare("SELECT id FROM estudiantes WHERE id = :id_val OR nie = :nie_val LIMIT 1");
 
@@ -93,25 +115,32 @@ try {
         }
 
         if ($realStudentId) {
-            // Intenta actualizar
-            $stmtUpdate->execute([
-                ':estado'           => $estado,
-                ':observacion'      => $observacion,
-                ':inasistencia_por' => $inasistencia_por,
-                ':estudiante_id'    => $realStudentId,
-                ':fecha'            => $fecha
-            ]);
+            $paramsUpdate = [
+                ':estado'        => $estado,
+                ':observacion'   => $observacion,
+                ':estudiante_id' => $realStudentId,
+                ':fecha'         => $fecha
+            ];
+            if ($tieneInasistenciaPor) {
+                $paramsUpdate[':inasistencia_por'] = $inasistencia_por;
+            }
 
-            // Si no afectó ninguna fila, inserta el nuevo registro
+            $stmtUpdate->execute($paramsUpdate);
+
+            // Si no existía el registro para esta fecha, lo crea
             if ($stmtUpdate->rowCount() === 0) {
+                $paramsInsert = [
+                    ':estudiante_id' => $realStudentId,
+                    ':fecha'         => $fecha,
+                    ':estado'        => $estado,
+                    ':observacion'   => $observacion
+                ];
+                if ($tieneInasistenciaPor) {
+                    $paramsInsert[':inasistencia_por'] = $inasistencia_por;
+                }
+
                 try {
-                    $stmtInsert->execute([
-                        ':estudiante_id'    => $realStudentId,
-                        ':fecha'            => $fecha,
-                        ':estado'           => $estado,
-                        ':observacion'      => $observacion,
-                        ':inasistencia_por' => $inasistencia_por
-                    ]);
+                    $stmtInsert->execute($paramsInsert);
                 } catch (Throwable $t) {}
             }
             $procesados++;
@@ -124,6 +153,6 @@ try {
     ]);
 
 } catch (Throwable $e) {
-    echo json_encode(["success" => false, "message" => $e->getMessage()]);
+    echo json_encode(["success" => false, "message" => "Error al guardar: " . $e->getMessage()]);
 }
 ?>
