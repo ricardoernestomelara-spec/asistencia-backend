@@ -3,7 +3,6 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Incluir conexión desde la raíz
 require_once '../conexion.php'; // cite: 1, 2
 
 $seccion = $_GET['seccion'] ?? '';
@@ -11,13 +10,8 @@ $asignatura = $_GET['asignatura'] ?? '';
 $periodo = $_GET['periodo'] ?? '';
 $fecha = $_GET['fecha'] ?? date('Y-m-d');
 
-if (empty($seccion)) {
-    echo json_encode(["error" => "La sección es requerida."]);
-    exit;
-}
-
 try {
-    // 1. Crear la tabla de asistencias automáticamente si no existe en MySQL
+    // 1. Crear automáticamente la tabla de asistencias si no existe
     $sqlCrearTabla = "CREATE TABLE IF NOT EXISTS asistencias (
         id INT AUTO_INCREMENT PRIMARY KEY,
         estudiante_id INT NOT NULL,
@@ -33,10 +27,33 @@ try {
 
     $pdo->exec($sqlCrearTabla); // cite: 1, 2
 
-    // 2. Preparar el término de búsqueda flexible para la sección
-    $seccionBusqueda = '%' . str_replace('Software', '%', $seccion) . '%';
+    // 2. Verificar los nombres reales de las columnas en la tabla 'estudiantes'
+    $columnasStmt = $pdo->query("SHOW COLUMNS FROM estudiantes");
+    $columnas = $columnasStmt->fetchAll(PDO::FETCH_COLUMN);
 
-    // 3. Consulta de estudiantes con LEFT JOIN a la tabla asistencias
+    // Identificar si existe alguna columna asociada a la sección/grado
+    $columnaSeccion = null;
+    foreach (['seccion', 'seccion_id', 'grado', 'curso', 'grupo'] as $col) {
+        if (in_array($col, $columnas)) {
+            $columnaSeccion = $col;
+            break;
+        }
+    }
+
+    // 3. Construir la consulta dinámicamente según las columnas existentes
+    $whereClause = "";
+    $params = [
+        ':fecha' => $fecha, // cite: 1
+        ':asignatura' => $asignatura, // cite: 1
+        ':periodo' => $periodo // cite: 1
+    ];
+
+    if ($columnaSeccion && !empty($seccion)) {
+        $seccionBusqueda = '%' . str_replace('Software', '%', $seccion) . '%';
+        $whereClause = "WHERE e.{$columnaSeccion} LIKE :seccion";
+        $params[':seccion'] = $seccionBusqueda;
+    }
+
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -52,16 +69,11 @@ try {
                 AND a.fecha = :fecha 
                 AND a.asignatura = :asignatura 
                 AND a.periodo = :periodo
-            WHERE e.seccion LIKE :seccion
+            {$whereClause}
             ORDER BY e.apellidos ASC"; // cite: 1
 
     $stmt = $pdo->prepare($sql); // cite: 1, 2
-    $stmt->execute([
-        ':fecha' => $fecha, // cite: 1
-        ':asignatura' => $asignatura, // cite: 1
-        ':periodo' => $periodo, // cite: 1
-        ':seccion' => $seccionBusqueda
-    ]);
+    $stmt->execute($params);
 
     $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC); // cite: 1
 
