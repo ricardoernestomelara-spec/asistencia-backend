@@ -1,10 +1,8 @@
 <?php
-// Limpiar cabeceras
 header_remove('Access-Control-Allow-Origin');
 header_remove('Access-Control-Allow-Headers');
 header_remove('Access-Control-Allow-Methods');
 
-// Cabeceras CORS
 header("Access-Control-Allow-Origin: *", true);
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Origin, Accept", true);
 header("Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS", true);
@@ -26,10 +24,6 @@ try {
         $pdo = $conn;
     }
 
-    if (!isset($pdo) || !$pdo) {
-        throw new Exception("Error interno: No hay conexión a la base de datos.");
-    }
-
     $docente_id = $_GET['docente_id'] ?? null;
 
     if (!$docente_id) {
@@ -37,8 +31,8 @@ try {
         exit();
     }
 
-    // Consulta de carga académica asociada a docentes, asignaturas y secciones
     $sql = "SELECT ca.id, 
+                   ca.seccion_id,
                    a.nombre AS asignatura, 
                    a.codigo AS codigo_asignatura, 
                    s.nombre AS seccion
@@ -57,7 +51,6 @@ try {
     ]);
 
 } catch (Throwable $e) {
-    // Retornamos 200 con mensaje controlado para evitar errores 500 en la consola
     http_response_code(200);
     echo json_encode([
         "success" => false,

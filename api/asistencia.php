@@ -1,17 +1,35 @@
 <?php
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
+header_remove('Access-Control-Allow-Origin');
+header_remove('Access-Control-Allow-Headers');
+header_remove('Access-Control-Allow-Methods');
+
+header("Access-Control-Allow-Origin: *", true);
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Origin, Accept", true);
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS", true);
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit(0);
+}
+
 header("Content-Type: application/json; charset=UTF-8");
 
-require_once '../conexion.php'; // cite: 1, 2
+error_reporting(0);
+ini_set('display_errors', 0);
 
-$seccion = $_GET['seccion'] ?? '';
-$asignatura = $_GET['asignatura'] ?? '';
-$periodo = $_GET['periodo'] ?? '';
-$fecha = $_GET['fecha'] ?? date('Y-m-d');
+require_once __DIR__ . '/../conexion.php';
+
+if (!isset($pdo) && isset($conn)) {
+    $pdo = $conn;
+}
+
+$seccionInput = $_GET['seccion'] ?? $_GET['seccion_id'] ?? '';
+$asignatura   = $_GET['asignatura'] ?? '';
+$periodo      = $_GET['periodo'] ?? '';
+$fecha        = $_GET['fecha'] ?? date('Y-m-d');
 
 try {
-    // 1. Asegurar la tabla de asistencias
+    // 1. Crear tabla asistencias si no existe
     $sqlCrearTabla = "CREATE TABLE IF NOT EXISTS asistencias (
         id INT AUTO_INCREMENT PRIMARY KEY,
         estudiante_id INT NOT NULL,
@@ -24,9 +42,27 @@ try {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
-    $pdo->exec($sqlCrearTabla); // cite: 1, 2
+    $pdo->exec($sqlCrearTabla);
 
-    // 2. Consulta con Subquery para obtener ÚNICAMENTE el registro de asistencia más reciente de cada alumno
+    // 2. Buscar el seccion_id correspondiente
+    $seccion_id = null;
+    if (is_numeric($seccionInput)) {
+        $seccion_id = (int)$seccionInput;
+    } elseif (!empty($seccionInput)) {
+        $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE TRIM(nombre) = TRIM(:nombre) LIMIT 1");
+        $stmtSec->execute([':nombre' => $seccionInput]);
+        $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
+        if ($sec) {
+            $seccion_id = $sec['id'];
+        }
+    }
+
+    if (!$seccion_id) {
+        echo json_encode([]);
+        exit();
+    }
+
+    // 3. Filtrar alumnos por el seccion_id específico
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -50,20 +86,23 @@ try {
                     GROUP BY estudiante_id
                 ) a2 ON a1.id = a2.max_id
             ) ult_asistencia ON e.id = ult_asistencia.estudiante_id
-            ORDER BY e.apellidos ASC";
+            WHERE e.seccion_id = :seccion_id
+            ORDER BY e.apellidos ASC, e.nombres ASC";
 
-    $stmt = $pdo->prepare($sql); // cite: 1, 2
+    $stmt = $pdo->prepare($sql);
     $stmt->execute([
-        ':fecha' => $fecha, // cite: 1
-        ':asignatura' => $asignatura, // cite: 1
-        ':periodo' => $periodo // cite: 1
+        ':fecha'      => $fecha,
+        ':asignatura' => $asignatura,
+        ':periodo'    => $periodo,
+        ':seccion_id' => $seccion_id
     ]);
 
-    $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC); // cite: 1
+    $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    echo json_encode($estudiantes); // cite: 1
+    echo json_encode($estudiantes);
 
-} catch (PDOException $e) {
-    echo json_encode(["error" => "Error en la consulta: " . $e->getMessage()]); // cite: 1
+} catch (Throwable $e) {
+    http_response_code(200);
+    echo json_encode(["error" => "Error en la consulta: " . $e->getMessage()]);
 }
 ?>
