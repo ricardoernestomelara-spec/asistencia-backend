@@ -3,8 +3,8 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
-// Subir un nivel para encontrar conexion.php en la raíz del backend
-require_once '../conexion.php';
+// Incluir conexión ubicada en la raíz
+require_once '../conexion.php'; // cite: 1, 2
 
 $seccion = $_GET['seccion'] ?? '';
 $asignatura = $_GET['asignatura'] ?? '';
@@ -17,7 +17,9 @@ if (empty($seccion)) {
 }
 
 try {
-    // Consulta que prioriza el estado guardado en la tabla asistencias si existe para la fecha/materia/periodo
+    // Si viene "1° A Software", preparamos el término para buscar también "1° A Desarrollo de Software"
+    $seccionBusqueda = '%' . str_replace('Software', '%', $seccion) . '%';
+
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -33,22 +35,22 @@ try {
                 AND a.fecha = :fecha 
                 AND a.asignatura = :asignatura 
                 AND a.periodo = :periodo
-            WHERE e.seccion = :seccion
-            ORDER BY e.apellidos ASC";
+            WHERE e.seccion LIKE :seccion
+            ORDER BY e.apellidos ASC"; // cite: 1
 
-    $stmt = $pdo->prepare($sql);
+    $stmt = $pdo->prepare($sql); // cite: 1, 2
     $stmt->execute([
-        ':fecha' => $fecha,
-        ':asignatura' => $asignatura,
-        ':periodo' => $periodo,
-        ':seccion' => $seccion
+        ':fecha' => $fecha, // cite: 1
+        ':asignatura' => $asignatura, // cite: 1
+        ':periodo' => $periodo, // cite: 1
+        ':seccion' => $seccionBusqueda
     ]);
 
-    $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $estudiantes = $stmt->fetchAll(PDO::FETCH_ASSOC); // cite: 1
 
-    echo json_encode($estudiantes);
+    echo json_encode($estudiantes); // cite: 1
 
 } catch (PDOException $e) {
-    echo json_encode(["error" => "Error en la consulta: " . $e->getMessage()]);
+    echo json_encode(["error" => "Error en la consulta: " . $e->getMessage()]); // cite: 1
 }
 ?>
