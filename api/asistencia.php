@@ -11,7 +11,7 @@ $periodo = $_GET['periodo'] ?? '';
 $fecha = $_GET['fecha'] ?? date('Y-m-d');
 
 try {
-    // 1. Asegurar la tabla de asistencias
+    // 1. Crear la tabla de asistencias con índice único para que reemplace registros anteriores
     $sqlCrearTabla = "CREATE TABLE IF NOT EXISTS asistencias (
         id INT AUTO_INCREMENT PRIMARY KEY,
         estudiante_id INT NOT NULL,
@@ -22,12 +22,12 @@ try {
         inasistencia_por VARCHAR(100) DEFAULT NULL,
         observacion TEXT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_estudiante_fecha (estudiante_id, fecha)
+        UNIQUE KEY uq_estudiante_fecha_materia (estudiante_id, fecha, asignatura, periodo)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
     $pdo->exec($sqlCrearTabla); // cite: 1, 2
 
-    // 2. Consulta limpia de estudiantes sin filtros bloqueantes
+    // 2. Traer la lista de estudiantes con su asistencia real guardada
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
