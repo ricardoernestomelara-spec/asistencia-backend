@@ -1,10 +1,10 @@
 <?php
-require_once __DIR__ . '/conexion.php';
-
-// Encabezados CORS
+// Permitir solicitudes desde el Frontend
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json; charset=UTF-8");
+
+require_once __DIR__ . '/conexion.php';
 
 $seccion = $_GET['seccion'] ?? '';
 $asignatura_id = $_GET['asignatura_id'] ?? '';
@@ -20,7 +20,7 @@ try {
         $pdo = $conn;
     }
 
-    // Consulta DISTINCT / GROUP BY por estudiante para garantizar filas únicas
+    // Traer TODOS los estudiantes de la sección, cruzar asistencia si existe, y agrupar para evitar duplicados
     $query = "
         SELECT 
             e.id AS estudiante_id,
@@ -28,8 +28,7 @@ try {
             e.apellidos,
             e.nombres,
             s.nombre AS seccion,
-            MAX(a.estado) AS estado_asistencia,
-            MAX(a.fecha) AS fecha
+            COALESCE(MAX(a.estado), 'Asistió') AS estado_asistencia
         FROM estudiantes e
         INNER JOIN secciones s ON e.seccion_id = s.id
         LEFT JOIN asistencia a 
@@ -53,7 +52,8 @@ try {
 
     echo json_encode($estudiantes);
 
-} catch (PDOException $e) {
+} catch (Exception $e) {
+    http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);
 }
 ?>
