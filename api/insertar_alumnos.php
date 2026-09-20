@@ -1,58 +1,85 @@
 <?php
-require_once __DIR__ . '/../conexion.php';
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Content-Type: application/json; charset=UTF-8");
 
-if (!isset($pdo) && isset($conn)) {
-    $pdo = $conn;
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
 }
 
+require_once __DIR__ . '/../conexion.php';
+
 try {
-    // 1. Asegurar que la tabla exista
-    $pdo->exec("CREATE TABLE IF NOT EXISTS estudiantes (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        nie VARCHAR(20) UNIQUE NOT NULL,
-        apellidos VARCHAR(100) NOT NULL,
-        nombres VARCHAR(100) NOT NULL,
-        seccion_id INT NOT NULL,
-        FOREIGN KEY (seccion_id) REFERENCES secciones(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-
-    // 2. Obtener la primera sección registrada (ej. 1° A Software)
-    $stmtSeccion = $pdo->query("SELECT id, nombre FROM secciones LIMIT 1");
-    $seccion = $stmtSeccion->fetch(PDO::FETCH_ASSOC);
-
-    if (!$seccion) {
-        die("Error: No hay secciones creadas en la base de datos.");
+    if (!isset($pdo) && isset($conn)) {
+        $pdo = $conn;
     }
 
-    $seccion_id = $seccion['id'];
-    echo "Insertando alumnos en la sección: " . $seccion['nombre'] . " (ID: $seccion_id)...<br>";
+    $seccionNombre = $_POST['seccion'] ?? '';
+    if (empty($seccionNombre) || !isset($_FILES['archivo'])) {
+        echo json_encode(['success' => false, 'message' => 'Falta seleccionar la sección o subir el archivo CSV.']);
+        exit;
+    }
 
-    // 3. Alumnos de prueba a registrar
-    $alumnosPrueba = [
-        ['nie' => '10293841', 'apellidos' => 'Gómez Hernández', 'nombres' => 'Carlos Eduardo'],
-        ['nie' => '10293842', 'apellidos' => 'Martínez López', 'nombres' => 'María José'],
-        ['nie' => '10293843', 'apellidos' => 'Rivas Orellana', 'nombres' => 'Kevin Alexander'],
-        ['nie' => '10293844', 'apellidos' => 'Torres Vásquez', 'nombres' => 'Andrea Beatriz']
-    ];
+    // 1. Obtener el ID de la sección objetivo
+    $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE TRIM(nombre) = TRIM(:nombre) LIMIT 1");
+    $stmtSec->execute([':nombre' => $seccionNombre]);
+    $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
 
-    $sqlInsert = "INSERT INTO estudiantes (nie, apellidos, nombres, seccion_id) 
-                  VALUES (:nie, :apellidos, :nombres, :seccion_id)
-                  ON DUPLICATE KEY UPDATE apellidos=VALUES(apellidos), nombres=VALUES(nombres)";
+    if ($sec) {
+        $seccionId = $sec['id'];
+    } else {
+        $stmtInsSec = $pdo->prepare("INSERT INTO secciones (nombre) VALUES (:nombre)");
+        $stmtInsSec->execute([':nombre' => $seccionNombre]);
+        $seccionId = $pdo->lastInsertId();
+    }
 
-    $stmtInsert = $pdo->prepare($sqlInsert);
+    // 2. Procesar líneas del archivo subido
+    $fileTmpPath = $_FILES['archivo']['tmp_name'];
+    $fileHandle = fopen($fileTmpPath, 'r');
 
-    foreach ($alumnosPrueba as $alumno) {
-        $stmtInsert->execute([
-            ':nie' => $alumno['nie'],
-            ':apellidos' => $alumno['apellidos'],
-            ':nombres' => $alumno['nombres'],
-            ':seccion_id' => $seccion_id
+    $stmtEst = $pdo->prepare("
+        INSERT INTO estudiantes (nie, apellidos, nombres, seccion_id)
+        VALUES (:nie, :apellidos, :nombres, :seccion_id)
+        ON DUPLICATE KEY UPDATE 
+            apellidos = VALUES(apellidos),
+            nombres = VALUES(nombres),
+            seccion_id = VALUES(seccion_id)
+    ");
+
+    $procesados = 0;
+    while (($data = fgetcsv($fileHandle, 1000, ";")) !== FALSE) {
+        // Detectar si la separación es por coma en lugar de punto y coma
+        if (count($data) < 2) {
+            $data = explode(",", $data[0]);
+        }
+
+        $nie = trim($data[0] ?? '');
+        $apellidos = trim($data[1] ?? '');
+        $nombres = trim($data[2] ?? '');
+
+        // Ignorar encabezados de columna o registros temporales
+        if (empty($nie) || stristr($nie, 'NIE') || stristr($nie, 'TEMP-')) continue;
+
+        $stmtEst->execute([
+            ':nie' => $nie,
+            ':apellidos' => $apellidos,
+            ':nombres' => $nombres,
+            ':seccion_id' => $seccionId
         ]);
+        $procesados++;
     }
 
-    echo "<b>¡Alumnos insertados con éxito en la base de datos de Aiven!</b>";
+    fclose($fileHandle);
+
+    echo json_encode([
+        'success' => true,
+        'message' => "Se importaron correctamente $procesados alumnos en la sección '$seccionNombre'."
+    ]);
 
 } catch (Exception $e) {
-    echo "Error al insertar alumnos: " . $e->getMessage();
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
 ?>
