@@ -3,7 +3,8 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
-require_once 'conexion.php'; // Asegúrate de ajustar la ruta a tu archivo de conexión
+// Subir un nivel para encontrar conexion.php en la raíz del backend
+require_once '../conexion.php';
 
 $seccion = $_GET['seccion'] ?? '';
 $asignatura = $_GET['asignatura'] ?? '';
