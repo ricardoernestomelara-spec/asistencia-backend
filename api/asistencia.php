@@ -11,7 +11,7 @@ $periodo = $_GET['periodo'] ?? '';
 $fecha = $_GET['fecha'] ?? date('Y-m-d');
 
 try {
-    // 1. Crear la tabla de asistencias con índice único para que reemplace registros anteriores
+    // 1. Asegurar la tabla de asistencias
     $sqlCrearTabla = "CREATE TABLE IF NOT EXISTS asistencias (
         id INT AUTO_INCREMENT PRIMARY KEY,
         estudiante_id INT NOT NULL,
@@ -21,29 +21,36 @@ try {
         estado VARCHAR(20) NOT NULL DEFAULT 'Asistió',
         inasistencia_por VARCHAR(100) DEFAULT NULL,
         observacion TEXT DEFAULT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_estudiante_fecha_materia (estudiante_id, fecha, asignatura, periodo)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
 
     $pdo->exec($sqlCrearTabla); // cite: 1, 2
 
-    // 2. Traer la lista de estudiantes con su asistencia real guardada
+    // 2. Consulta con Subquery para obtener ÚNICAMENTE el registro de asistencia más reciente de cada alumno
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
                 e.apellidos,
                 e.nombres,
                 CONCAT(e.apellidos, ' ', e.nombres) AS nombre_completo,
-                IFNULL(a.estado, 'Asistió') AS asistencia,
-                IFNULL(a.estado, 'Asistió') AS estado,
-                a.inasistencia_por,
-                a.observacion
+                IFNULL(ult_asistencia.estado, 'Asistió') AS asistencia,
+                IFNULL(ult_asistencia.estado, 'Asistió') AS estado,
+                ult_asistencia.inasistencia_por,
+                ult_asistencia.observacion
             FROM estudiantes e
-            LEFT JOIN asistencias a ON e.id = a.estudiante_id 
-                AND a.fecha = :fecha 
-                AND a.asignatura = :asignatura 
-                AND a.periodo = :periodo
-            ORDER BY e.apellidos ASC"; // cite: 1
+            LEFT JOIN (
+                SELECT a1.*
+                FROM asistencias a1
+                INNER JOIN (
+                    SELECT estudiante_id, MAX(id) AS max_id
+                    FROM asistencias
+                    WHERE fecha = :fecha 
+                      AND asignatura = :asignatura 
+                      AND periodo = :periodo
+                    GROUP BY estudiante_id
+                ) a2 ON a1.id = a2.max_id
+            ) ult_asistencia ON e.id = ult_asistencia.estudiante_id
+            ORDER BY e.apellidos ASC";
 
     $stmt = $pdo->prepare($sql); // cite: 1, 2
     $stmt->execute([
