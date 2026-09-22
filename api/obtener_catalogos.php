@@ -1,5 +1,6 @@
 <?php
 // Limpiar cabeceras previas para evitar duplicados
+//este es un ejemplo
 header_remove('Access-Control-Allow-Origin');
 header_remove('Access-Control-Allow-Headers');
 header_remove('Access-Control-Allow-Methods');
