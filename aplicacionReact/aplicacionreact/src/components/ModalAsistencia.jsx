@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
+// Catálogo oficial completo
 const OPCIONES_ESTADO = [
   'Asistió',
   'Faltó',
@@ -10,20 +11,37 @@ const OPCIONES_ESTADO = [
 ];
 
 const OPCIONES_MOTIVO = [
-  'Asebo',
   'Aislamiento social',
   'Bajo rendimiento',
   'Competencia Deportiva',
   'Cuarentena',
   'Cuido de familiar',
+  'Desinterés de los padres por la educación',
   'Dificultad del transporte',
   'Dificultades de aprendizajes',
   'Discapacidad del estudiante',
+  'Docente no asistió a clases',
+  'Embarazo precoz',
   'Enfermedad',
   'Falta de motivación',
   'Inseguridad en el camino a la escuela',
+  'Integrante de grupos que lo aleja de la escuela',
+  'Muerte de un pariente',
+  'Motivo Personal',
+  'Nacimiento de hermano(a)',
   'No desea presentarse a exámenes',
-  'No desea presentar tarea'
+  'No desea presentar tarea',
+  'Noviazgo a temprana edad',
+  'Otro, justificado',
+  'Otro, No justificado',
+  'Presencia de alcohólicos en el hogar',
+  'Presencia de la menstruación',
+  'Problemas relacionados con los compañeros',
+  'Retención en la casa',
+  'Separación de los padres',
+  'Se retiró del país',
+  'Socieeconómico',
+  'Trabajo'
 ];
 
 function ModalAsistencia({ estudiantes = [], onClose, onGuardar }) {
@@ -34,13 +52,13 @@ function ModalAsistencia({ estudiantes = [], onClose, onGuardar }) {
     if (estudiantes && estudiantes.length > 0) {
       setAsistencia(
         estudiantes.map((e) => ({
-          estudiante_id: e.id,
+          estudiante_id: e.id || e.estudiante_id,
           nie: e.nie,
           apellidos: e.apellidos,
           nombres: e.nombres,
-          estado: 'Asistió',
-          inasistencia_por: '',
-          observacion: ''
+          estado: e.asistencia || e.estado || 'Asistió',
+          inasistencia_por: e.inasistencia_por || '',
+          observacion: e.observacion || ''
         }))
       );
     }
@@ -49,6 +67,12 @@ function ModalAsistencia({ estudiantes = [], onClose, onGuardar }) {
   const handleChange = (index, field, value) => {
     const copia = [...asistencia];
     copia[index][field] = value;
+
+    if (field === 'estado' && value === 'Asistió') {
+      copia[index].inasistencia_por = '';
+      copia[index].observacion = '';
+    }
+
     setAsistencia(copia);
   };
 
@@ -115,6 +139,7 @@ function ModalAsistencia({ estudiantes = [], onClose, onGuardar }) {
                     </td>
                     <td style={styles.td}>
                       <select
+                        disabled={item.estado === 'Asistió'}
                         value={item.inasistencia_por}
                         onChange={(e) => handleChange(idx, 'inasistencia_por', e.target.value)}
                         style={styles.select}
@@ -128,6 +153,7 @@ function ModalAsistencia({ estudiantes = [], onClose, onGuardar }) {
                     <td style={styles.td}>
                       <input
                         type="text"
+                        disabled={item.estado === 'Asistió'}
                         value={item.observacion}
                         onChange={(e) => handleChange(idx, 'observacion', e.target.value)}
                         style={styles.input}

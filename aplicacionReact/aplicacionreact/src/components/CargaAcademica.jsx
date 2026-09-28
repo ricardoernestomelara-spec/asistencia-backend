@@ -1,104 +1,150 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from '../config';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://asistencia-backend-qgim.onrender.com/api';
+const CargaAcademica = () => {
+  const [docentes, setDocentes] = useState([]);
+  const [secciones, setSecciones] = useState([]);
+  const [asignaturas, setAsignaturas] = useState([]);
 
-const CargaAcademica = ({ docenteId = 1 }) => {
-  const [cargaRegular, setCargaRegular] = useState([]);
-  const [seccionOrientacion, setSeccionOrientacion] = useState(null);
+  const [docenteId, setDocenteId] = useState('');
+  const [seccionId, setSeccionId] = useState('');
+  const [asignaturaId, setAsignaturaId] = useState('');
 
+  const [mensaje, setMensaje] = useState({ texto: '', tipo: '' });
+  const [cargando, setCargando] = useState(false);
+
+  // Cargar catálogo de docentes, secciones y asignaturas
   useEffect(() => {
-    if (!docenteId) return;
-
-    fetch(`${API_BASE}/carga_academica.php?docente_id=${docenteId}`)
+    fetch(`${API_BASE}/obtener_catalogos.php`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.success && data.carga) {
-          // 1. Filtrar las materias que NO son "Orientación" para la tabla superior
-          const regulares = data.carga.filter(
-            (item) => item.asignatura.trim().toLowerCase() !== 'orientación' &&
-                      item.asignatura.trim().toLowerCase() !== 'orientacion'
-          );
-
-          // 2. Buscar si tiene asignada la materia "Orientación" para la tabla inferior
-          const orientacionEncontrada = data.carga.find(
-            (item) => item.asignatura.trim().toLowerCase() === 'orientación' ||
-                      item.asignatura.trim().toLowerCase() === 'orientacion'
-          );
-
-          setCargaRegular(regulares);
-          
-          if (orientacionEncontrada) {
-            setSeccionOrientacion(orientacionEncontrada.seccion);
-          } else {
-            setSeccionOrientacion(null);
-          }
+        if (data.success) {
+          setDocentes(data.docentes || []);
+          setSecciones(data.secciones || []);
+          setAsignaturas(data.asignaturas || []);
         } else {
-          setCargaRegular([]);
-          setSeccionOrientacion(null);
+          setMensaje({ texto: 'No se pudieron cargar los datos de los catálogos.', tipo: 'danger' });
         }
       })
-      .catch((err) => console.error("Error al obtener la carga:", err));
-  }, [docenteId]);
+      .catch((err) => {
+        console.error('Error al cargar catálogos:', err);
+        setMensaje({ texto: 'Error de conexión al obtener los catálogos.', tipo: 'danger' });
+      });
+  }, []);
+
+  const handleAsignar = (e) => {
+    e.preventDefault();
+    if (!docenteId || !seccionId || !asignaturaId) {
+      setMensaje({ texto: 'Por favor completa todos los campos del formulario.', tipo: 'warning' });
+      return;
+    }
+
+    setCargando(true);
+    setMensaje({ texto: '', tipo: '' });
+
+    // Corrección de endpoint: 'guardar_carga.php' + conversión a entero (parseInt)
+    fetch(`${API_BASE}/guardar_carga.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        docente_id: parseInt(docenteId, 10),
+        seccion_id: parseInt(seccionId, 10),
+        asignatura_id: parseInt(asignaturaId, 10),
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          setMensaje({ texto: data.message || 'Carga académica asignada exitosamente.', tipo: 'success' });
+          setDocenteId('');
+          setSeccionId('');
+          setAsignaturaId('');
+        } else {
+          setMensaje({ texto: data.message || 'No se pudo asignar la carga académica.', tipo: 'danger' });
+        }
+      })
+      .catch((err) => {
+        console.error('Error al asignar carga:', err);
+        setMensaje({ texto: 'Error de conexión con el servidor al asignar.', tipo: 'danger' });
+      })
+      .finally(() => setCargando(false));
+  };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1000px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-        
-        {/* TABLA SUPERIOR: ASIGNATURAS REGULARES */}
-        <div style={{ backgroundColor: '#007b8f', color: '#ffffff', padding: '12px 16px', fontWeight: '700', fontSize: '14px', letterSpacing: '0.5px' }}>
-          CARGA ACADÉMICA 2026
-        </div>
-        
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#e0f2f1', color: '#004d40', borderBottom: '1px solid #b2dfdb', textTransform: 'uppercase', fontSize: '12px' }}>
-              <th style={{ padding: '12px 16px', textAlign: 'left', width: '50%' }}>ASIGNATURA(S)</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', width: '50%' }}>SECCIÓN(ES)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cargaRegular.length === 0 ? (
-              <tr>
-                <td colSpan={2} style={{ padding: '14px 16px', color: '#666', textAlign: 'center' }}>
-                  Sin asignaturas regulares asignadas
-                </td>
-              </tr>
-            ) : (
-              cargaRegular.map((item, index) => (
-                <tr key={item.id || index} style={{ borderBottom: '1px solid #eee' }}>
-                  <td style={{ padding: '12px 16px', color: '#333' }}>{item.asignatura}</td>
-                  <td style={{ padding: '12px 16px', color: '#333' }}>{item.seccion}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+    <div className="panel-card bg-white p-4 rounded shadow-sm">
+      <h4 className="fw-bold text-primary mb-2">📝 Asignar Carga Académica</h4>
+      <p className="text-muted small mb-4">
+        Asocia un docente con una asignatura y una sección específica.
+      </p>
 
-        {/* TABLA INFERIOR: SECCIÓN DE ORIENTACIÓN */}
-        <div style={{ backgroundColor: '#2d3748', color: '#ffffff', padding: '12px 16px', fontWeight: '700', fontSize: '14px', letterSpacing: '0.5px', marginTop: '4px' }}>
-          SECCIÓN DE ORIENTACIÓN
+      {mensaje.texto && (
+        <div className={`alert alert-${mensaje.tipo} alert-dismissible fade show`} role="alert">
+          {mensaje.texto}
+          <button type="button" className="btn-close" onClick={() => setMensaje({ texto: '', tipo: '' })}></button>
+        </div>
+      )}
+
+      <form onSubmit={handleAsignar} className="row g-3">
+        {/* Selección de Docente */}
+        <div className="col-md-4">
+          <label className="form-label fw-bold small text-secondary">DOCENTE</label>
+          <select
+            className="form-select"
+            value={docenteId}
+            onChange={(e) => setDocenteId(e.target.value)}
+            required
+          >
+            <option value="">-- Seleccionar Docente --</option>
+            {docentes.map((doc) => (
+              <option key={doc.id} value={doc.id}>
+                {doc.nombre || doc.nombre_completo}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#edf2f7', color: '#2d3748', borderBottom: '1px solid #cbd5e0', textTransform: 'uppercase', fontSize: '12px' }}>
-              <th style={{ padding: '12px 16px', textAlign: 'left', width: '50%' }}>SECCIÓN DE ORIENTACIÓN</th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', width: '50%' }}>AULA ASIGNADA</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style={{ borderBottom: '1px solid #eee' }}>
-              <td style={{ padding: '12px 16px', fontWeight: seccionOrientacion ? '600' : 'normal', color: '#333' }}>
-                {seccionOrientacion ? seccionOrientacion : 'Ninguna'}
-              </td>
-              <td style={{ padding: '12px 16px', color: '#333' }}>
-                {seccionOrientacion ? 'Aula Asignada' : 'N/A'}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        {/* Selección de Sección */}
+        <div className="col-md-4">
+          <label className="form-label fw-bold small text-secondary">SECCIÓN</label>
+          <select
+            className="form-select"
+            value={seccionId}
+            onChange={(e) => setSeccionId(e.target.value)}
+            required
+          >
+            <option value="">-- Seleccionar Sección --</option>
+            {secciones.map((sec) => (
+              <option key={sec.id} value={sec.id}>
+                {sec.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      </div>
+        {/* Selección de Asignatura */}
+        <div className="col-md-4">
+          <label className="form-label fw-bold small text-secondary">ASIGNATURA</label>
+          <select
+            className="form-select"
+            value={asignaturaId}
+            onChange={(e) => setAsignaturaId(e.target.value)}
+            required
+          >
+            <option value="">-- Seleccionar Asignatura --</option>
+            {asignaturas.map((asig) => (
+              <option key={asig.id} value={asig.id}>
+                {asig.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="col-12 text-end mt-4">
+          <button type="submit" disabled={cargando} className="btn btn-primary px-4 fw-bold">
+            {cargando ? 'Guardando...' : '➕ Asignar Carga'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

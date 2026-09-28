@@ -182,3 +182,9 @@
     border-right-color: var(--border);
   }
 }
+
+aside .sidebar-footer {
+  background-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}

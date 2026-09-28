@@ -16,23 +16,39 @@ $mes = $_GET['mes'] ?? date('m');
 $anio = $_GET['anio'] ?? date('Y');
 
 if (!$seccion_id) {
-    echo json_encode(["success" => false, "message" => "Seccion no requerida"]);
+    echo json_encode(["success" => false, "message" => "Sección requerida"]);
     exit();
 }
 
 try {
+    // Consulta agrupada por estudiante para el mes y año solicitados
     $stmt = $pdo->prepare("
-        SELECT e.nombre AS estudiante, a.fecha, a.estado 
-        FROM asistencia a
-        INNER JOIN estudiantes e ON a.estudiante_id = e.id
-        WHERE e.seccion_id = :seccion_id 
-          AND MONTH(a.fecha) = :mes 
-          AND YEAR(a.fecha) = :anio
-        ORDER BY e.nombre, a.fecha ASC
+        SELECT 
+            e.id AS estudiante_id,
+            e.nie,
+            e.nombre AS estudiante,
+            SUM(CASE WHEN a.estado = 'Asistió' THEN 1 ELSE 0 END) AS asistencias,
+            SUM(CASE WHEN a.estado IN ('Faltó', 'Retirado') THEN 1 ELSE 0 END) AS inasistencias,
+            SUM(CASE WHEN a.estado IN ('Permiso', 'Incapacidad', 'Tardía') THEN 1 ELSE 0 END) AS permisos
+        FROM estudiantes e
+        LEFT JOIN asistencia a ON a.estudiante_id = e.id 
+            AND MONTH(a.fecha) = :mes 
+            AND YEAR(a.fecha) = :anio
+        WHERE e.seccion_id = :seccion_id
+        GROUP BY e.id, e.nie, e.nombre
+        ORDER BY e.nombre ASC
     ");
-    $stmt->execute([':seccion_id' => $seccion_id, ':mes' => $mes, ':anio' => $anio]);
+    
+    $stmt->execute([
+        ':seccion_id' => $seccion_id, 
+        ':mes' => $mes, 
+        ':anio' => $anio
+    ]);
 
-    echo json_encode(["success" => true, "reporte" => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+    echo json_encode([
+        "success" => true, 
+        "reporte" => $stmt->fetchAll(PDO::FETCH_ASSOC)
+    ]);
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode(["success" => false, "message" => $e->getMessage()]);
