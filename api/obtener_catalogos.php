@@ -31,7 +31,6 @@ try {
         throw new Exception("Error interno: No hay conexión activa a la BD.");
     }
 
-    // Capturar si la petición pide filtrar por un docente en específico
     $docente_id = $_GET['docente_id'] ?? $_GET['id_docente'] ?? null;
 
     // 1. Obtener Docentes
@@ -39,36 +38,52 @@ try {
     $docentes = $stmtDocentes->fetchAll(PDO::FETCH_ASSOC);
 
     if (!empty($docente_id)) {
-        // --- FILTRADO PARA DOCENTE ESPECÍFICO (Preza) ---
-        
-        // 2. Obtener solo sus Asignaturas asignadas
-        $sqlAsig = "SELECT DISTINCT a.id, a.nombre, a.codigo 
-                    FROM asignaturas a
-                    INNER JOIN docente_carga dc ON (dc.asignatura_id = a.id OR dc.id_asignatura = a.id)
-                    WHERE (dc.docente_id = :d1 OR dc.id_docente = :d2)
-                    ORDER BY a.nombre ASC";
-        $stmtAsig = $pdo->prepare($sqlAsig);
-        $stmtAsig->execute([':d1' => $docente_id, ':d2' => $docente_id]);
-        $asignaturas = $stmtAsig->fetchAll(PDO::FETCH_ASSOC);
-
-        // 3. Obtener solo sus Secciones asignadas
+        // Intentar obtener las secciones asignadas mediante las distintas tablas posibles de carga académica
         $sqlSec = "SELECT DISTINCT s.id, s.nombre 
-                   FROM secciones s
-                   INNER JOIN docente_carga dc ON (dc.seccion_id = s.id OR dc.id_seccion = s.id)
-                   WHERE (dc.docente_id = :d1 OR dc.id_docente = :d2)
-                   ORDER BY s.nombre ASC";
+                   FROM secciones s 
+                   WHERE s.id IN (
+                       SELECT seccion_id FROM carga_academica WHERE docente_id = :d1
+                       UNION SELECT id_seccion FROM carga_academica WHERE id_docente = :d1
+                       UNION SELECT seccion_id FROM docente_carga WHERE docente_id = :d1
+                       UNION SELECT id_seccion FROM docente_carga WHERE id_docente = :d1
+                       UNION SELECT seccion_id FROM asignaciones WHERE docente_id = :d1
+                   ) ORDER BY s.nombre ASC";
+                   
         $stmtSec = $pdo->prepare($sqlSec);
-        $stmtSec->execute([':d1' => $docente_id, ':d2' => $docente_id]);
+        $stmtSec->execute([':d1' => $docente_id]);
         $secciones = $stmtSec->fetchAll(PDO::FETCH_ASSOC);
 
-    } else {
-        // --- CONSULTA GLOBAL HISTÓRICA (Sin cambios, para no romper el resto del sistema) ---
+        // Intentar obtener las asignaturas asignadas
+        $sqlAsig = "SELECT DISTINCT a.id, a.nombre, a.codigo 
+                    FROM asignaturas a 
+                    WHERE a.id IN (
+                        SELECT asignatura_id FROM carga_academica WHERE docente_id = :d1
+                        UNION SELECT id_asignatura FROM carga_academica WHERE id_docente = :d1
+                        UNION SELECT asignatura_id FROM docente_carga WHERE docente_id = :d1
+                        UNION SELECT id_asignatura FROM docente_carga WHERE id_docente = :d1
+                        UNION SELECT asignatura_id FROM asignaciones WHERE docente_id = :d1
+                    ) ORDER BY a.nombre ASC";
 
-        // 2. Obtener Asignaturas / Módulos
+        $stmtAsig = $pdo->prepare($sqlAsig);
+        $stmtAsig->execute([':d1' => $docente_id]);
+        $asignaturas = $stmtAsig->fetchAll(PDO::FETCH_ASSOC);
+
+        // Si por alguna razón la subconsulta filtrada viene vacía, retornamos los catalogos globales para evitar pantallas en blanco
+        if (empty($secciones)) {
+            $stmtSecciones = $pdo->query("SELECT id, nombre FROM secciones ORDER BY nombre ASC");
+            $secciones = $stmtSecciones->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        if (empty($asignaturas)) {
+            $stmtAsignaturas = $pdo->query("SELECT id, nombre, codigo FROM asignaturas ORDER BY nombre ASC");
+            $asignaturas = $stmtAsignaturas->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+    } else {
+        // Modo por defecto / Administrador
         $stmtAsignaturas = $pdo->query("SELECT id, nombre, codigo FROM asignaturas ORDER BY nombre ASC");
         $asignaturas = $stmtAsignaturas->fetchAll(PDO::FETCH_ASSOC);
 
-        // 3. Obtener Secciones
         $stmtSecciones = $pdo->query("SELECT id, nombre FROM secciones ORDER BY nombre ASC");
         $secciones = $stmtSecciones->fetchAll(PDO::FETCH_ASSOC);
     }
