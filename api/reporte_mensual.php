@@ -18,27 +18,34 @@ try {
 
     $anio = $_GET['anio'] ?? date('Y');
     $mes = $_GET['mes'] ?? date('m');
-    $seccionNombre = $_GET['seccion'] ?? '';
-    $asignaturaId = $_GET['asignatura'] ?? null; // o asignaturaNombre según tu filtro
+    $seccionParam = $_GET['seccion'] ?? '';
+    $asignaturaParam = $_GET['asignatura'] ?? '';
 
-    if (empty($seccionNombre)) {
+    if (empty($seccionParam)) {
         echo json_encode(['success' => false, 'message' => 'La sección es requerida.']);
         exit;
     }
 
-    // 1. Obtener el ID de la sección
-    $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE TRIM(nombre) = TRIM(:nombre) LIMIT 1");
-    $stmtSec->execute([':nombre' => $seccionNombre]);
+    // 1. Buscar la sección tolerando diferencias de '°' y espacios
+    $seccionLimpia = str_replace('°', '', $seccionParam);
+    
+    $stmtSec = $pdo->prepare("
+        SELECT id FROM secciones 
+        WHERE LOWER(REPLACE(nombre, '°', '')) LIKE LOWER(:nombre) 
+        LIMIT 1
+    ");
+    $stmtSec->execute([':nombre' => '%' . trim($seccionLimpia) . '%']);
     $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
 
     if (!$sec) {
+        // Si no se encuentra por nombre exacto, intentar buscar todos los estudiantes de esa sección directamente
         echo json_encode(['success' => true, 'data' => []]);
         exit;
     }
 
     $seccionId = $sec['id'];
 
-    // 2. Consultar estudiantes de la sección y cruzar sus asistencias con LEFT JOIN
+    // 2. Consulta de estudiantes cruzada con asistencia mediante LEFT JOIN
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -53,7 +60,6 @@ try {
             FROM estudiantes e
             LEFT JOIN asistencias a ON e.id = a.estudiante_id 
                 AND a.seccion_id = :seccion_id
-                " . ($asignaturaId ? "AND a.asignatura_id = :asignatura_id" : "") . "
                 AND YEAR(a.fecha) = :anio 
                 AND MONTH(a.fecha) = :mes
             WHERE e.seccion_id = :seccion_id
@@ -61,18 +67,12 @@ try {
             ORDER BY e.apellidos ASC, e.nombres ASC";
 
     $stmt = $pdo->prepare($sql);
-
-    $params = [
+    $stmt->execute([
         ':seccion_id' => $seccionId,
         ':anio' => $anio,
         ':mes' => $mes
-    ];
+    ]);
 
-    if ($asignaturaId) {
-        $params[':asignatura_id'] = $asignaturaId;
-    }
-
-    $stmt->execute($params);
     $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode([
