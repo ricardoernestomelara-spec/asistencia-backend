@@ -18,41 +18,41 @@ try {
 
     $seccionParam = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
     $asignaturaParam = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? null;
-    $anio = $_GET['anio'] ?? date('Y');
+    $anio = (int)($_GET['anio'] ?? date('Y'));
     $mesParam = $_GET['mes'] ?? date('m');
 
     if (empty($seccionParam)) {
-        echo json_encode(['success' => false, 'message' => 'La sección es requerida.', 'reporte' => []]);
+        echo json_encode(['success' => false, 'message' => 'La sección es requerida.', 'reporte' => [], 'data' => []]);
         exit;
     }
 
-    // Resolver ID de Sección (soporta tanto ID numérico como Nombre de Sección)
+    // 1. Obtener ID de la sección (si viene como texto '1° A Software' o como ID '1')
+    $seccionId = $seccionParam;
     if (!is_numeric($seccionParam)) {
         $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
         $stmtSec->execute([':nombre' => $seccionParam]);
-        $seccionId = $stmtSec->fetchColumn();
-    } else {
-        $seccionId = $seccionParam;
+        $fetchedSec = $stmtSec->fetchColumn();
+        if ($fetchedSec) {
+            $seccionId = $fetchedSec;
+        }
     }
 
-    // Resolver ID de Asignatura (si aplica)
+    // 2. Obtener ID de la asignatura (si aplica)
     $asignaturaId = null;
     if (!empty($asignaturaParam)) {
         if (!is_numeric($asignaturaParam)) {
             $stmtAsig = $pdo->prepare("SELECT id FROM asignaturas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
             $stmtAsig->execute([':nombre' => $asignaturaParam]);
-            $asignaturaId = $stmtAsig->fetchColumn();
+            $fetchedAsig = $stmtAsig->fetchColumn();
+            if ($fetchedAsig) {
+                $asignaturaId = $fetchedAsig;
+            }
         } else {
             $asignaturaId = $asignaturaParam;
         }
     }
 
-    if (!$seccionId) {
-        echo json_encode(['success' => true, 'reporte' => [], 'data' => []]);
-        exit;
-    }
-
-    // Conversión de mes
+    // 3. Normalizar mes a número entero (1 - 12)
     $mesesMap = [
         'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
         'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
@@ -60,11 +60,11 @@ try {
     ];
     $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[mb_strtolower(trim($mesParam))] ?? (int)date('m'));
 
-    // Consulta con LEFT JOIN
+    // 4. Consulta SQL: Obtener TODOS los estudiantes de la sección y contar asistencias
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
-                CONCAT(e.apellidos, ' ', e.nombres) AS estudiante,
+                CONCAT(e.apellidos, ', ', e.nombres) AS estudiante,
                 e.apellidos,
                 e.nombres,
                 COUNT(CASE WHEN LOWER(a.estado) IN ('asistió', 'asistio', 'presente') THEN 1 END) AS asistencias,
@@ -74,7 +74,6 @@ try {
                 COUNT(a.id) AS total_registros
             FROM estudiantes e
             LEFT JOIN asistencias a ON e.id = a.estudiante_id 
-                AND a.seccion_id = :seccion_id
                 " . (!empty($asignaturaId) ? "AND a.asignatura_id = :asignatura_id" : "") . "
                 AND YEAR(a.fecha) = :anio 
                 AND MONTH(a.fecha) = :mes
@@ -83,10 +82,11 @@ try {
             ORDER BY e.apellidos ASC, e.nombres ASC";
 
     $stmt = $pdo->prepare($sql);
+    
     $params = [
         ':seccion_id' => $seccionId,
-        ':anio' => $anio,
-        ':mes' => $mesNum
+        ':anio'       => $anio,
+        ':mes'        => $mesNum
     ];
 
     if (!empty($asignaturaId)) {
@@ -96,11 +96,11 @@ try {
     $stmt->execute($params);
     $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Mantiene compatibilidad total devolviendo 'reporte' y 'data'
+    // Respuesta dual para máxima compatibilidad con el frontend
     echo json_encode([
         'success' => true,
         'reporte' => $reporte,
-        'data' => $reporte
+        'data'    => $reporte
     ]);
 
 } catch (Exception $e) {
