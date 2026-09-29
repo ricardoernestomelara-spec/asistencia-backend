@@ -25,7 +25,7 @@ try {
         throw new Exception("Error de conexión a la base de datos.");
     }
 
-    // Recibir parámetros
+    // Recibir parámetros del Frontend
     $seccionParam = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
     $asignaturaParam = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? null;
     $anio = (int)($_GET['anio'] ?? date('Y'));
@@ -62,7 +62,7 @@ try {
         }
     }
 
-    // 3. Normalizar mes (evita uso de mb_strtolower para prevenir error 500 si no está instalada la extensión)
+    // 3. Normalizar mes (1-12)
     $mesesMap = [
         'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
         'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
@@ -72,7 +72,7 @@ try {
     $mesLower = strtolower(trim((string)$mesParam));
     $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[$mesLower] ?? (int)date('m'));
 
-    // 4. Construcción dinámica de SQL
+    // 4. Construcción dinámica del filtro por Asignatura (asistencia.asignatura_id o asistencia.asignatura)
     $whereAsignatura = "";
     $params = [
         ':seccion_id' => $seccionId,
@@ -81,14 +81,16 @@ try {
     ];
 
     if (!empty($asignaturaId)) {
-        $whereAsignatura = " AND a.asignatura_id = :asignatura_id ";
+        $whereAsignatura = " AND (a.asignatura_id = :asignatura_id OR LOWER(TRIM(a.asignatura)) = LOWER(TRIM(:asignatura_nombre))) ";
         $params[':asignatura_id'] = $asignaturaId;
+        $params[':asignatura_nombre'] = $asignaturaParam;
     }
 
+    // 5. Consulta SQL apuntando a la tabla 'asistencia' (singular) y uniendo estudiantes
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
-                CONCAT(e.apellidos, ' ', e.nombres) AS estudiante,
+                CONCAT(e.apellidos, ', ', e.nombres) AS estudiante,
                 e.apellidos,
                 e.nombres,
                 COUNT(CASE WHEN LOWER(a.estado) IN ('asistió', 'asistio', 'presente') THEN 1 END) AS asistencias,
@@ -97,7 +99,7 @@ try {
                 COUNT(CASE WHEN LOWER(a.estado) IN ('tardía', 'tardia') THEN 1 END) AS tardias,
                 COUNT(a.id) AS total_registros
             FROM estudiantes e
-            LEFT JOIN asistencias a ON e.id = a.estudiante_id 
+            LEFT JOIN asistencia a ON e.id = a.estudiante_id 
                 {$whereAsignatura}
                 AND YEAR(a.fecha) = :anio 
                 AND MONTH(a.fecha) = :mes
@@ -116,7 +118,7 @@ try {
     ]);
 
 } catch (Throwable $e) {
-    http_response_code(200); // Evitar romper el cliente con HTTP 500
+    http_response_code(200);
     echo json_encode([
         'success' => false,
         'message' => 'Error backend: ' . $e->getMessage(),
