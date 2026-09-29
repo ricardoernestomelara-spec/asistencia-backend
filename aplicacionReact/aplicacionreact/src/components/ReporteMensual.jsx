@@ -29,24 +29,34 @@ export const ReporteMensual = ({ docenteId, usuario = 'Docente', esAdmin = false
   const [reporte, setReporte] = useState([]);
   const [cargando, setCargando] = useState(false);
 
-  // Cargar Catálogos Iniciales
+  // 1. Cargar Catálogos Filtrados por Docente
   useEffect(() => {
     const obtenerCatalogos = async () => {
       try {
-        const res = await fetch(`${API_BASE}/obtener_catalogos.php`);
+        const url = esAdmin || !docenteId
+          ? `${API_BASE}/obtener_catalogos.php` 
+          : `${API_BASE}/obtener_catalogos.php?docente_id=${docenteId}`;
+
+        const res = await fetch(url);
         const data = await res.json();
 
         if (data.success) {
-          const listSecciones = data.secciones || [];
-          setSecciones(listSecciones);
-          if (listSecciones.length > 0) {
-            setSeccionId(listSecciones[0].id || listSecciones[0].nombre);
+          let listSecciones = data.secciones || [];
+          let listAsignaturas = data.asignaturas || [];
+
+          if (!esAdmin && data.docente_carga) {
+            listSecciones = data.docente_carga.secciones || listSecciones;
+            listAsignaturas = data.docente_carga.asignaturas || listAsignaturas;
           }
 
-          const listAsignaturas = data.asignaturas || [];
+          setSecciones(listSecciones);
+          if (listSecciones.length > 0) {
+            setSeccionId(String(listSecciones[0].id));
+          }
+
           setAsignaturas(listAsignaturas);
           if (listAsignaturas.length > 0) {
-            setAsignaturaId(listAsignaturas[0].id || listAsignaturas[0].nombre);
+            setAsignaturaId(String(listAsignaturas[0].id));
           }
         }
       } catch (err) {
@@ -55,18 +65,20 @@ export const ReporteMensual = ({ docenteId, usuario = 'Docente', esAdmin = false
     };
 
     obtenerCatalogos();
-  }, []);
+  }, [docenteId, esAdmin]);
 
-  // Cargar Reporte de Alumnos y Asistencias
+  // 2. Cargar Reporte de Alumnos y Asistencias
   useEffect(() => {
-    if (!seccionId) return;
+    if (!seccionId || !asignaturaId) return;
 
     const cargarReporte = async () => {
       setCargando(true);
       try {
         const queryParams = new URLSearchParams({
           seccion_id: seccionId,
+          id_seccion: seccionId,
           asignatura_id: asignaturaId,
+          id_asignatura: asignaturaId,
           mes: mes,
           anio: anio
         });
@@ -93,22 +105,20 @@ export const ReporteMensual = ({ docenteId, usuario = 'Docente', esAdmin = false
   }, [seccionId, asignaturaId, mes, anio]);
 
   const nombreMes = MESES.find(m => m.id === mes)?.nombre || mes;
-  const objSeccion = secciones.find(s => String(s.id) === String(seccionId) || s.nombre === seccionId);
+  const objSeccion = secciones.find(s => String(s.id) === String(seccionId));
   const nombreSeccion = objSeccion ? objSeccion.nombre : seccionId;
-  const objAsignatura = asignaturas.find(a => String(a.id) === String(asignaturaId) || a.nombre === asignaturaId);
+  const objAsignatura = asignaturas.find(a => String(a.id) === String(asignaturaId));
   const nombreAsignatura = objAsignatura ? objAsignatura.nombre : 'Todas las asignaturas';
 
   return (
     <div className="reporte-container" style={{ padding: '20px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', fontFamily: 'system-ui, sans-serif' }}>
       
-      {/* OCULTAMIENTO COMPLETO DE LA NAVEGACIÓN Y MENÚ EN IMPRESIÓN */}
+      {/* ESTILOS DE IMPRESIÓN */}
       <style>{`
         @media print {
-          /* Ocultar la barra lateral y navegación general de la app */
           body * {
             visibility: hidden !important;
           }
-          /* Mostrar únicamente el contenedor de la hoja del reporte */
           .reporte-container, .reporte-container * {
             visibility: visible !important;
           }
@@ -143,7 +153,7 @@ export const ReporteMensual = ({ docenteId, usuario = 'Docente', esAdmin = false
         }
       `}</style>
 
-      {/* ENCABEZADO EXCLUSIVO PARA HOJA IMPRESA / PDF */}
+      {/* ENCABEZADO EXCLUSIVO PARA IMPRESIÓN */}
       <div className="print-header" style={{ display: 'none' }}>
         <h2 style={{ margin: '0 0 4px 0', textAlign: 'center', fontSize: '18px', textTransform: 'uppercase' }}>
           CENTRO EDUCATIVO - REGISTRO DE ASISTENCIA
@@ -209,35 +219,27 @@ export const ReporteMensual = ({ docenteId, usuario = 'Docente', esAdmin = false
         <div>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>SECCIÓN</label>
           <select value={seccionId} onChange={(e) => setSeccionId(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-            {secciones.length === 0 ? (
-              <option value="">Sin secciones</option>
-            ) : (
-              secciones.map((sec) => (
-                <option key={sec.id || sec.nombre} value={sec.id || sec.nombre}>
-                  {sec.nombre}
-                </option>
-              ))
-            )}
+            {secciones.map((sec) => (
+              <option key={sec.id} value={sec.id}>
+                {sec.nombre}
+              </option>
+            ))}
           </select>
         </div>
 
         <div>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>ASIGNATURA / MÓDULO</label>
           <select value={asignaturaId} onChange={(e) => setAsignaturaId(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-            {asignaturas.length === 0 ? (
-              <option value="">Todas las asignaturas</option>
-            ) : (
-              asignaturas.map((asig) => (
-                <option key={asig.id || asig.nombre} value={asig.id || asig.nombre}>
-                  {asig.nombre}
-                </option>
-              ))
-            )}
+            {asignaturas.map((asig) => (
+              <option key={asig.id} value={asig.id}>
+                {asig.nombre}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
-      {/* RESULTADOS / TABLA */}
+      {/* TABLA DE RESULTADOS */}
       {cargando ? (
         <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>Cargando información del reporte...</div>
       ) : reporte.length === 0 ? (
