@@ -17,7 +17,7 @@ try {
     }
 
     $anio = $_GET['anio'] ?? date('Y');
-    $mes = $_GET['mes'] ?? date('m');
+    $mesParam = $_GET['mes'] ?? date('m');
     $seccionParam = $_GET['seccion'] ?? '';
     $asignaturaParam = $_GET['asignatura'] ?? '';
 
@@ -26,36 +26,43 @@ try {
         exit;
     }
 
-    // 1. Buscar la sección tolerando diferencias de '°' y espacios
-    $seccionLimpia = str_replace('°', '', $seccionParam);
-    
+    // 1. Mapear el mes de texto a número si es necesario
+    $mesesMap = [
+        'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
+        'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
+        'septiembre' => 9, 'octubre' => 10, 'noviembre' => 11, 'diciembre' => 12
+    ];
+
+    $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[mb_strtolower(trim($mesParam))] ?? (int)date('m'));
+
+    // 2. Obtener el ID de la sección
     $stmtSec = $pdo->prepare("
         SELECT id FROM secciones 
-        WHERE LOWER(REPLACE(nombre, '°', '')) LIKE LOWER(:nombre) 
+        WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) 
+           OR LOWER(REPLACE(nombre, '°', '')) = LOWER(REPLACE(:nombre, '°', ''))
         LIMIT 1
     ");
-    $stmtSec->execute([':nombre' => '%' . trim($seccionLimpia) . '%']);
+    $stmtSec->execute([':nombre' => $seccionParam]);
     $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
 
     if (!$sec) {
-        // Si no se encuentra por nombre exacto, intentar buscar todos los estudiantes de esa sección directamente
         echo json_encode(['success' => true, 'data' => []]);
         exit;
     }
 
     $seccionId = $sec['id'];
 
-    // 2. Consulta de estudiantes cruzada con asistencia mediante LEFT JOIN
+    // 3. Consulta de estudiantes cruzada con asistencias (LEFT JOIN para asegurar que aparezcan)
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
                 CONCAT(e.apellidos, ', ', e.nombres) AS nombre_completo,
-                COUNT(CASE WHEN a.estado = 'Asistió' THEN 1 END) AS asistencias,
-                COUNT(CASE WHEN a.estado = 'Faltó' THEN 1 END) AS faltas,
-                COUNT(CASE WHEN a.estado = 'Permiso' THEN 1 END) AS permisos,
-                COUNT(CASE WHEN a.estado = 'Incapacidad' THEN 1 END) AS incapacidades,
-                COUNT(CASE WHEN a.estado = 'Tardía' THEN 1 END) AS tardias,
-                COUNT(CASE WHEN a.estado = 'Retirado' THEN 1 END) AS retirados,
+                COUNT(CASE WHEN LOWER(a.estado) = 'asistió' OR LOWER(a.estado) = 'asistio' THEN 1 END) AS asistencias,
+                COUNT(CASE WHEN LOWER(a.estado) = 'faltó' OR LOWER(a.estado) = 'falto' THEN 1 END) AS faltas,
+                COUNT(CASE WHEN LOWER(a.estado) = 'permiso' THEN 1 END) AS permisos,
+                COUNT(CASE WHEN LOWER(a.estado) = 'incapacidad' THEN 1 END) AS incapacidades,
+                COUNT(CASE WHEN LOWER(a.estado) = 'tardía' OR LOWER(a.estado) = 'tardia' THEN 1 END) AS tardias,
+                COUNT(CASE WHEN LOWER(a.estado) = 'retirado' THEN 1 END) AS retirados,
                 COUNT(a.id) AS total_registros
             FROM estudiantes e
             LEFT JOIN asistencias a ON e.id = a.estudiante_id 
@@ -70,7 +77,7 @@ try {
     $stmt->execute([
         ':seccion_id' => $seccionId,
         ':anio' => $anio,
-        ':mes' => $mes
+        ':mes' => $mesNum
     ]);
 
     $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
