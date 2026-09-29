@@ -49,7 +49,7 @@ try {
 
     // 2. Resolver ID de Asignatura (opcional)
     $asignaturaId = null;
-    if (!empty($asignaturaParam)) {
+    if (!empty($asignaturaParam) && strtolower($asignaturaParam) !== 'todas') {
         if (!is_numeric($asignaturaParam)) {
             $stmtAsig = $pdo->prepare("SELECT id FROM asignaturas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
             $stmtAsig->execute([':nombre' => $asignaturaParam]);
@@ -72,7 +72,7 @@ try {
     $mesLower = strtolower(trim((string)$mesParam));
     $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[$mesLower] ?? (int)date('m'));
 
-    // 4. Construcción dinámica del filtro por Asignatura (asistencia.asignatura_id o asistencia.asignatura)
+    // 4. Construcción dinámica del filtro por Asignatura
     $whereAsignatura = "";
     $params = [
         ':seccion_id' => $seccionId,
@@ -80,13 +80,19 @@ try {
         ':mes'        => $mesNum
     ];
 
-    if (!empty($asignaturaId)) {
-        $whereAsignatura = " AND (a.asignatura_id = :asignatura_id OR LOWER(TRIM(a.asignatura)) = LOWER(TRIM(:asignatura_nombre))) ";
-        $params[':asignatura_id'] = $asignaturaId;
-        $params[':asignatura_nombre'] = $asignaturaParam;
+    // Solo filtra por asignatura si no está vacía y no es la opción "Todas"
+    if (!empty($asignaturaParam) && strtolower(trim($asignaturaParam)) !== 'todas') {
+        if (!empty($asignaturaId)) {
+            $whereAsignatura = " AND (a.asignatura_id = :asignatura_id OR LOWER(TRIM(a.asignatura)) = LOWER(TRIM(:asignatura_nombre))) ";
+            $params[':asignatura_id'] = $asignaturaId;
+            $params[':asignatura_nombre'] = $asignaturaParam;
+        } else {
+            $whereAsignatura = " AND LOWER(TRIM(a.asignatura)) = LOWER(TRIM(:asignatura_nombre)) ";
+            $params[':asignatura_nombre'] = $asignaturaParam;
+        }
     }
 
-    // 5. Consulta SQL apuntando a la tabla 'asistencia' (singular) y uniendo estudiantes
+    // 5. Consulta SQL apuntando a la tabla 'asistencia' (singular)
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
