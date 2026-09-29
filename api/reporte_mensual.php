@@ -16,18 +16,16 @@ try {
         $pdo = $conn;
     }
 
-    // El frontend envía seccion_id y asignatura_id (numéricos)
     $seccionId = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
     $asignaturaId = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? null;
     $anio = $_GET['anio'] ?? date('Y');
     $mesParam = $_GET['mes'] ?? date('m');
 
     if (empty($seccionId)) {
-        echo json_encode(['success' => false, 'message' => 'La sección es requerida.']);
+        echo json_encode(['success' => false, 'message' => 'La sección es requerida.', 'reporte' => []]);
         exit;
     }
 
-    // Convertir el mes a número en caso de que venga como texto o '09'
     $mesesMap = [
         'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
         'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
@@ -36,22 +34,21 @@ try {
 
     $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[mb_strtolower(trim($mesParam))] ?? (int)date('m'));
 
-    // Consulta con LEFT JOIN usando seccion_id para traer a TODOS los estudiantes de esa sección
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
-                CONCAT(e.apellidos, ', ', e.nombres) AS nombre_completo,
-                COUNT(CASE WHEN LOWER(a.estado) = 'asistió' OR LOWER(a.estado) = 'asistio' THEN 1 END) AS asistencias,
-                COUNT(CASE WHEN LOWER(a.estado) = 'faltó' OR LOWER(a.estado) = 'falto' THEN 1 END) AS faltas,
-                COUNT(CASE WHEN LOWER(a.estado) = 'permiso' THEN 1 END) AS permisos,
-                COUNT(CASE WHEN LOWER(a.estado) = 'incapacidad' THEN 1 END) AS incapacidades,
-                COUNT(CASE WHEN LOWER(a.estado) = 'tardía' OR LOWER(a.estado) = 'tardia' THEN 1 END) AS tardias,
-                COUNT(CASE WHEN LOWER(a.estado) = 'retirado' THEN 1 END) AS retirados,
+                CONCAT(e.apellidos, ' ', e.nombres) AS estudiante,
+                e.apellidos,
+                e.nombres,
+                COUNT(CASE WHEN LOWER(a.estado) IN ('asistió', 'asistio', 'presente') THEN 1 END) AS asistencias,
+                COUNT(CASE WHEN LOWER(a.estado) IN ('faltó', 'falto', 'inasistencia', 'ausente') THEN 1 END) AS inasistencias,
+                COUNT(CASE WHEN LOWER(a.estado) IN ('permiso', 'incapacidad') THEN 1 END) AS permisos,
+                COUNT(CASE WHEN LOWER(a.estado) IN ('tardía', 'tardia') THEN 1 END) AS tardias,
                 COUNT(a.id) AS total_registros
             FROM estudiantes e
             LEFT JOIN asistencias a ON e.id = a.estudiante_id 
                 AND a.seccion_id = :seccion_id
-                " . ($asignaturaId ? "AND a.asignatura_id = :asignatura_id" : "") . "
+                " . (!empty($asignaturaId) ? "AND a.asignatura_id = :asignatura_id" : "") . "
                 AND YEAR(a.fecha) = :anio 
                 AND MONTH(a.fecha) = :mes
             WHERE e.seccion_id = :seccion_id
@@ -66,20 +63,22 @@ try {
         ':mes' => $mesNum
     ];
 
-    if ($asignaturaId) {
+    if (!empty($asignaturaId)) {
         $params[':asignatura_id'] = $asignaturaId;
     }
 
     $stmt->execute($params);
     $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    // Se devuelven ambos formatos ('reporte' y 'data') para garantización de compatibilidad
     echo json_encode([
         'success' => true,
+        'reporte' => $reporte,
         'data' => $reporte
     ]);
 
 } catch (Exception $e) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => $e->getMessage(), 'reporte' => []]);
 }
 ?>
