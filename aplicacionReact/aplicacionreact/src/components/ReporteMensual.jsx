@@ -16,59 +16,73 @@ const MESES = [
   { id: '12', nombre: 'Diciembre' },
 ];
 
-export const ReporteMensual = ({ docenteId, esAdmin = false }) => {
+export const ReporteMensual = ({ docenteId, usuario = 'Docente', esAdmin = false }) => {
   const [anio, setAnio] = useState(new Date().getFullYear().toString());
   const [mes, setMes] = useState(String(new Date().getMonth() + 1).padStart(2, '0'));
   
   const [secciones, setSecciones] = useState([]);
   const [seccionId, setSeccionId] = useState('');
 
+  const [asignaturas, setAsignaturas] = useState([]);
+  const [asignaturaId, setAsignaturaId] = useState('');
+
   const [reporte, setReporte] = useState([]);
   const [cargando, setCargando] = useState(false);
 
-  // 1. Cargar las secciones habilitadas según el rol
+  // Cargar Catálogos Iniciales
   useEffect(() => {
-    const obtenerSecciones = async () => {
+    const obtenerCatalogos = async () => {
       try {
-        const endpoint = esAdmin
-          ? `${API_BASE}/obtener_catalogos.php`
-          : `${API_BASE}/carga_academica.php?docente_id=${docenteId}`;
-
-        const res = await fetch(endpoint);
+        const res = await fetch(`${API_BASE}/obtener_catalogos.php`);
         const data = await res.json();
 
         if (data.success) {
-          const listaSecs = esAdmin ? data.secciones || [] : data.carga || [];
-          setSecciones(listaSecs);
-          if (listaSecs.length > 0) {
-            setSeccionId(listaSecs[0].seccion_id || listaSecs[0].id || '');
+          const listSecciones = data.secciones || [];
+          setSecciones(listSecciones);
+          if (listSecciones.length > 0) {
+            setSeccionId(listSecciones[0].id || listSecciones[0].nombre);
+          }
+
+          const listAsignaturas = data.asignaturas || [];
+          setAsignaturas(listAsignaturas);
+          if (listAsignaturas.length > 0) {
+            setAsignaturaId(listAsignaturas[0].id || listAsignaturas[0].nombre);
           }
         }
       } catch (err) {
-        console.error('Error al cargar secciones:', err);
+        console.error('Error al obtener catálogos:', err);
       }
     };
 
-    obtenerSecciones();
-  }, [docenteId, esAdmin]);
+    obtenerCatalogos();
+  }, []);
 
-  // 2. Cargar reporte mensual enviando seccion_id, mes y anio
+  // Cargar Reporte de Alumnos y Asistencias
   useEffect(() => {
     if (!seccionId) return;
 
     const cargarReporte = async () => {
       setCargando(true);
       try {
-        const res = await fetch(`${API_BASE}/reporte_mensual.php?seccion_id=${seccionId}&mes=${mes}&anio=${anio}`);
+        const queryParams = new URLSearchParams({
+          seccion_id: seccionId,
+          asignatura_id: asignaturaId,
+          mes: mes,
+          anio: anio
+        });
+
+        const res = await fetch(`${API_BASE}/reporte_mensual.php?${queryParams.toString()}`);
         const data = await res.json();
 
         if (data.success && Array.isArray(data.reporte)) {
           setReporte(data.reporte);
+        } else if (Array.isArray(data)) {
+          setReporte(data);
         } else {
           setReporte([]);
         }
       } catch (err) {
-        console.error('Error al obtener reporte:', err);
+        console.error('Error al cargar reporte:', err);
         setReporte([]);
       } finally {
         setCargando(false);
@@ -76,45 +90,116 @@ export const ReporteMensual = ({ docenteId, esAdmin = false }) => {
     };
 
     cargarReporte();
-  }, [seccionId, mes, anio]);
+  }, [seccionId, asignaturaId, mes, anio]);
+
+  const nombreMes = MESES.find(m => m.id === mes)?.nombre || mes;
+  const objSeccion = secciones.find(s => String(s.id) === String(seccionId) || s.nombre === seccionId);
+  const nombreSeccion = objSeccion ? objSeccion.nombre : seccionId;
+  const objAsignatura = asignaturas.find(a => String(a.id) === String(asignaturaId) || a.nombre === asignaturaId);
+  const nombreAsignatura = objAsignatura ? objAsignatura.nombre : 'Todas las asignaturas';
 
   return (
-    <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+    <div className="reporte-container" style={{ padding: '20px', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', fontFamily: 'system-ui, sans-serif' }}>
+      
+      {/* OCULTAMIENTO COMPLETO DE LA NAVEGACIÓN Y MENÚ EN IMPRESIÓN */}
+      <style>{`
+        @media print {
+          /* Ocultar la barra lateral y navegación general de la app */
+          body * {
+            visibility: hidden !important;
+          }
+          /* Mostrar únicamente el contenedor de la hoja del reporte */
+          .reporte-container, .reporte-container * {
+            visibility: visible !important;
+          }
+          .reporte-container {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-header {
+            display: block !important;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+          }
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            font-size: 11pt !important;
+          }
+          th, td {
+            border: 1px solid #000 !important;
+            padding: 6px 8px !important;
+          }
+        }
+      `}</style>
+
+      {/* ENCABEZADO EXCLUSIVO PARA HOJA IMPRESA / PDF */}
+      <div className="print-header" style={{ display: 'none' }}>
+        <h2 style={{ margin: '0 0 4px 0', textAlign: 'center', fontSize: '18px', textTransform: 'uppercase' }}>
+          CENTRO EDUCATIVO - REGISTRO DE ASISTENCIA
+        </h2>
+        <h3 style={{ margin: '0 0 12px 0', textAlign: 'center', fontSize: '14px', color: '#333' }}>
+          REPORTE MENSUAL DE ASISTENCIA E INASISTENCIAS
+        </h3>
+        <table style={{ width: '100%', marginBottom: '15px', border: 'none', fontSize: '12px' }}>
+          <tbody>
+            <tr>
+              <td style={{ border: 'none', padding: '3px' }}><strong>Sección:</strong> {nombreSeccion}</td>
+              <td style={{ border: 'none', padding: '3px' }}><strong>Asignatura/Módulo:</strong> {nombreAsignatura}</td>
+            </tr>
+            <tr>
+              <td style={{ border: 'none', padding: '3px' }}><strong>Período:</strong> {nombreMes} - {anio}</td>
+              <td style={{ border: 'none', padding: '3px' }}><strong>Docente:</strong> {usuario}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* ENCABEZADO PANTALLA WEB */}
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1e293b' }}>
           📊 Reporte Mensual de Inasistencias
         </h3>
         
         <button
           onClick={() => window.print()}
-          disabled={reporte.length === 0}
           style={{
-            padding: '8px 16px',
-            backgroundColor: reporte.length === 0 ? '#cbd5e1' : '#0284c7',
+            padding: '9px 18px',
+            backgroundColor: '#0284c7',
             color: '#fff',
             border: 'none',
             borderRadius: '6px',
             fontWeight: 'bold',
-            cursor: reporte.length === 0 ? 'not-allowed' : 'pointer'
+            cursor: 'pointer'
           }}
         >
-          🖨️ Imprimir Reporte
+          🖨️ Imprimir Reporte (PDF)
         </button>
       </div>
 
-      {/* Controles de Filtros */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+      {/* FILTROS WEB */}
+      <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         <div>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>AÑO</label>
-          <select value={anio} onChange={(e) => setAnio(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>AÑO</label>
+          <select value={anio} onChange={(e) => setAnio(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
             <option value="2026">2026</option>
             <option value="2025">2025</option>
           </select>
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>MES</label>
-          <select value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>MES</label>
+          <select value={mes} onChange={(e) => setMes(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
             {MESES.map((m) => (
               <option key={m.id} value={m.id}>{m.nombre}</option>
             ))}
@@ -122,59 +207,83 @@ export const ReporteMensual = ({ docenteId, esAdmin = false }) => {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '4px' }}>SECCIÓN</label>
-          <select value={seccionId} onChange={(e) => setSeccionId(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-            {secciones.map((sec) => (
-              <option key={sec.seccion_id || sec.id} value={sec.seccion_id || sec.id}>
-                {sec.seccion || sec.nombre}
-              </option>
-            ))}
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>SECCIÓN</label>
+          <select value={seccionId} onChange={(e) => setSeccionId(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+            {secciones.length === 0 ? (
+              <option value="">Sin secciones</option>
+            ) : (
+              secciones.map((sec) => (
+                <option key={sec.id || sec.nombre} value={sec.id || sec.nombre}>
+                  {sec.nombre}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: '#64748b', marginBottom: '6px' }}>ASIGNATURA / MÓDULO</label>
+          <select value={asignaturaId} onChange={(e) => setAsignaturaId(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+            {asignaturas.length === 0 ? (
+              <option value="">Todas las asignaturas</option>
+            ) : (
+              asignaturas.map((asig) => (
+                <option key={asig.id || asig.nombre} value={asig.id || asig.nombre}>
+                  {asig.nombre}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>
 
-      {/* Tabla de Resultados */}
+      {/* RESULTADOS / TABLA */}
       {cargando ? (
-        <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>Cargando reporte...</div>
+        <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>Cargando información del reporte...</div>
       ) : reporte.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px' }}>
-          No hay inasistencias registradas para esta sección en el mes seleccionado.
+          No existen registros o estudiantes asignados a esta combinación en el sistema.
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1' }}>
-                <th style={{ padding: '10px', textAlign: 'center', width: '40px' }}>#</th>
+                <th style={{ padding: '10px', textAlign: 'center', width: '40px' }}>N°</th>
                 <th style={{ padding: '10px' }}>NIE</th>
                 <th style={{ padding: '10px' }}>ESTUDIANTE</th>
-                <th style={{ padding: '10px', textAlign: 'center', color: '#16a34a' }}>ASISTIÓ</th>
-                <th style={{ padding: '10px', textAlign: 'center', color: '#dc2626' }}>FALTAS</th>
+                <th style={{ padding: '10px', textAlign: 'center', color: '#16a34a' }}>ASISTENCIAS</th>
+                <th style={{ padding: '10px', textAlign: 'center', color: '#dc2626' }}>INASISTENCIAS</th>
                 <th style={{ padding: '10px', textAlign: 'center', color: '#d97706' }}>PERMISOS</th>
-                <th style={{ padding: '10px', textAlign: 'center' }}>% INASISTENCIA</th>
+                <th style={{ padding: '10px', textAlign: 'center' }}>% INASISTENCIAS</th>
               </tr>
             </thead>
             <tbody>
               {reporte.map((item, idx) => {
-                const totalClases = Number(item.asistencias) + Number(item.inasistencias) + Number(item.permisos);
-                const pctFaltas = totalClases > 0 ? ((item.inasistencias / totalClases) * 100).toFixed(1) : 0;
+                const asist = Number(item.asistencias || 0);
+                const inasist = Number(item.inasistencias || 0);
+                const perm = Number(item.permisos || 0);
+                const totalClases = asist + inasist + perm;
+                const pctFaltas = totalClases > 0 ? ((inasist / totalClases) * 100).toFixed(1) : '0.0';
 
                 return (
                   <tr key={item.estudiante_id || idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
                     <td style={{ padding: '10px', textAlign: 'center', color: '#64748b' }}>{idx + 1}</td>
                     <td style={{ padding: '10px', color: '#334155' }}>{item.nie || 'N/A'}</td>
-                    <td style={{ padding: '10px', fontWeight: 'bold', color: '#0f172a' }}>{item.estudiante}</td>
-                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#16a34a' }}>{item.asistencias}</td>
-                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#dc2626' }}>{item.inasistencias}</td>
-                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#d97706' }}>{item.permisos}</td>
+                    <td style={{ padding: '10px', fontWeight: 'bold', color: '#0f172a' }}>
+                      {item.estudiante || `${item.apellidos || ''} ${item.nombres || ''}`}
+                    </td>
+                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#16a34a' }}>{asist}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#dc2626' }}>{inasist}</td>
+                    <td style={{ padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#d97706' }}>{perm}</td>
                     <td style={{ padding: '10px', textAlign: 'center' }}>
                       <span style={{
                         padding: '3px 8px',
                         borderRadius: '12px',
                         fontWeight: 'bold',
                         fontSize: '11px',
-                        backgroundColor: pctFaltas > 15 ? '#fee2e2' : '#e2e8f0',
-                        color: pctFaltas > 15 ? '#991b1b' : '#334155'
+                        backgroundColor: Number(pctFaltas) > 15 ? '#fee2e2' : '#e2e8f0',
+                        color: Number(pctFaltas) > 15 ? '#991b1b' : '#334155'
                       }}>
                         {pctFaltas}%
                       </span>
