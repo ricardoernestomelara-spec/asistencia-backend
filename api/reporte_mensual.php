@@ -16,17 +16,18 @@ try {
         $pdo = $conn;
     }
 
+    // El frontend envía seccion_id y asignatura_id (numéricos)
+    $seccionId = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
+    $asignaturaId = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? null;
     $anio = $_GET['anio'] ?? date('Y');
     $mesParam = $_GET['mes'] ?? date('m');
-    $seccionParam = $_GET['seccion'] ?? '';
-    $asignaturaParam = $_GET['asignatura'] ?? '';
 
-    if (empty($seccionParam)) {
+    if (empty($seccionId)) {
         echo json_encode(['success' => false, 'message' => 'La sección es requerida.']);
         exit;
     }
 
-    // 1. Mapear el mes de texto a número si es necesario
+    // Convertir el mes a número en caso de que venga como texto o '09'
     $mesesMap = [
         'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
         'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
@@ -35,24 +36,7 @@ try {
 
     $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[mb_strtolower(trim($mesParam))] ?? (int)date('m'));
 
-    // 2. Obtener el ID de la sección
-    $stmtSec = $pdo->prepare("
-        SELECT id FROM secciones 
-        WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) 
-           OR LOWER(REPLACE(nombre, '°', '')) = LOWER(REPLACE(:nombre, '°', ''))
-        LIMIT 1
-    ");
-    $stmtSec->execute([':nombre' => $seccionParam]);
-    $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
-
-    if (!$sec) {
-        echo json_encode(['success' => true, 'data' => []]);
-        exit;
-    }
-
-    $seccionId = $sec['id'];
-
-    // 3. Consulta de estudiantes cruzada con asistencias (LEFT JOIN para asegurar que aparezcan)
+    // Consulta con LEFT JOIN usando seccion_id para traer a TODOS los estudiantes de esa sección
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -67,6 +51,7 @@ try {
             FROM estudiantes e
             LEFT JOIN asistencias a ON e.id = a.estudiante_id 
                 AND a.seccion_id = :seccion_id
+                " . ($asignaturaId ? "AND a.asignatura_id = :asignatura_id" : "") . "
                 AND YEAR(a.fecha) = :anio 
                 AND MONTH(a.fecha) = :mes
             WHERE e.seccion_id = :seccion_id
@@ -74,12 +59,18 @@ try {
             ORDER BY e.apellidos ASC, e.nombres ASC";
 
     $stmt = $pdo->prepare($sql);
-    $stmt->execute([
+
+    $params = [
         ':seccion_id' => $seccionId,
         ':anio' => $anio,
         ':mes' => $mesNum
-    ]);
+    ];
 
+    if ($asignaturaId) {
+        $params[':asignatura_id'] = $asignaturaId;
+    }
+
+    $stmt->execute($params);
     $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode([
