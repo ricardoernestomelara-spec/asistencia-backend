@@ -1,71 +1,65 @@
 <?php
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
-    exit();
+    exit;
 }
 
-require_once '../conexion.php';
-
-$data = json_decode(file_get_contents("php://input"), true);
-
-if (!$data) {
-    echo json_encode(["success" => false, "message" => "Datos no válidos."]);
-    exit();
-}
-
-$fecha = $data['fecha'] ?? date('Y-m-d');
-$asignatura = $data['asignatura'] ?? '';
-$periodo = $data['periodo'] ?? '';
-$asistencias = $data['asistencias'] ?? [];
-
-if (empty($asistencias)) {
-    echo json_encode(["success" => false, "message" => "No hay asistencias para guardar."]);
-    exit();
-}
+require_once __DIR__ . '/../conexion.php';
 
 try {
-    // Consulta limpia: borra o actualiza garantizando que no habrá duplicados
-    $sql = "INSERT INTO asistencias (estudiante_id, fecha, asignatura, periodo, estado, inasistencia_por, observacion)
-            VALUES (:estudiante_id, :fecha, :asignatura, :periodo, :estado, :inasistencia_por, :observacion)
-            ON DUPLICATE KEY UPDATE 
-                estado = VALUES(estado),
-                inasistencia_por = VALUES(inasistencia_por),
-                observacion = VALUES(observacion)";
-
-    $stmt = $pdo->prepare($sql);
-
-    $registrosProcesados = 0;
-    foreach ($asistencias as $ast) {
-        $estudiante_id = $ast['estudiante_id'] ?? null;
-        $estado = $ast['asistencia'] ?? $ast['estado'] ?? 'Asistió';
-        $inasistencia_por = $ast['inasistencia_por'] ?? null;
-        $observacion = $ast['observacion'] ?? null;
-
-        if ($estudiante_id) {
-            $stmt->execute([
-                ':estudiante_id' => $estudiante_id,
-                ':fecha' => $fecha,
-                ':asignatura' => $asignatura,
-                ':periodo' => $periodo,
-                ':estado' => $estado,
-                ':inasistencia_por' => $inasistencia_por,
-                ':observacion' => $observacion
-            ]);
-            $registrosProcesados++;
-        }
+    if (!isset($pdo) && isset($conn)) {
+        $pdo = $conn;
     }
 
-    echo json_encode([
-        "success" => true,
-        "message" => "Asistencia procesada correctamente ({$registrosProcesados} registros)."
-    ]);
+    $input = json_decode(file_get_contents("php://input"), true);
 
-} catch (PDOException $e) {
-    echo json_encode(["success" => false, "message" => "Error al guardar: " . $e->getMessage()]);
+    $fecha = $input['fecha'] ?? date('Y-m-d');
+    $seccionId = $input['seccion_id'] ?? null;
+    $asignaturaId = $input['asignatura_id'] ?? null;
+    $asistencias = $input['asistencias'] ?? [];
+
+    if (!$seccionId || empty($asistencias)) {
+        echo json_encode(['success' => false, 'message' => 'Faltan datos de sección o la lista de asistencias.']);
+        exit;
+    }
+
+    $pdo->beginTransaction();
+
+    $stmt = $pdo->prepare("
+        INSERT INTO asistencias (estudiante_id, seccion_id, asignatura_id, fecha, estado, motivo, observacion)
+        VALUES (:estudiante_id, :seccion_id, :asignatura_id, :fecha, :estado, :motivo, :observacion)
+        ON DUPLICATE KEY UPDATE 
+            estado = VALUES(estado),
+            motivo = VALUES(motivo),
+            observacion = VALUES(observacion)
+    ");
+
+    foreach ($asistencias as $item) {
+        $stmt->execute([
+            ':estudiante_id' => $item['estudiante_id'],
+            ':seccion_id' => $seccionId,
+            ':asignatura_id' => $asignaturaId,
+            ':fecha' => $fecha,
+            ':estado' => $item['estado'],
+            ':motivo' => $item['motivo'] ?? null,
+            ':observacion' => $item['observacion'] ?? null
+        ]);
+    }
+
+    $pdo->commit();
+
+    echo json_encode(['success' => true, 'message' => 'Asistencia guardada correctamente.']);
+
+} catch (Exception $e) {
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }
 ?>
