@@ -21,16 +21,16 @@ ini_set('display_errors', 0);
 require_once __DIR__ . '/../conexion.php';
 
 if (!isset($pdo) && isset($conn)) {
-    $pdo =$conn;
+    $pdo = $conn;
 }
 
 // Capturar parámetros
-$seccionInput    =$_GET['seccion_id'] ?? $_GET['seccion'] ?? $_GET['id_seccion'] ?? null;
-$asignaturaInput =$_GET['asignatura_id'] ?? $_GET['asignatura'] ?? $_GET['id_asignatura'] ?? null;
-$mes_param       =$_GET['mes'] ?? null;
-$anio            =$_GET['anio'] ?? date('Y');
+$seccionInput    = $_GET['seccion_id'] ?? $_GET['seccion'] ?? $_GET['id_seccion'] ?? null;
+$asignaturaInput = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? $_GET['id_asignatura'] ?? null;
+$mes_param       = $_GET['mes'] ?? null;
+$anio            = $_GET['anio'] ?? date('Y');
 
-if (!$seccionInput \vert{}\vert{} !$mes_param) {
+if (!$seccionInput || !$mes_param) {
     echo json_encode([
         'success' => false,
         'message' => 'Faltan parámetros requeridos',
@@ -45,23 +45,23 @@ try {
     if (is_numeric($seccionInput)) {
         $seccion_id = (int)$seccionInput;
     } else {
-        $stmtSec =$pdo->prepare("SELECT id FROM secciones WHERE TRIM(nombre) = TRIM(:nombre) LIMIT 1");
-        $stmtSec->execute([':nombre' =>$seccionInput]);
-        $sec =$stmtSec->fetch(PDO::FETCH_ASSOC);
+        $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE TRIM(nombre) = TRIM(:nombre) LIMIT 1");
+        $stmtSec->execute([':nombre' => $seccionInput]);
+        $sec = $stmtSec->fetch(PDO::FETCH_ASSOC);
         if ($sec) {
             $seccion_id = (int)$sec['id'];
         }
     }
 
-    // 2. Obtener Nombre de Asignatura (si le pasan ID buscar su nombre/código)
+    // 2. Obtener Nombre de Asignatura
     $asignatura_nombre = null;
     if (!empty($asignaturaInput)) {
         if (is_numeric($asignaturaInput)) {
-            $stmtAsig =$pdo->prepare("SELECT nombre FROM asignaturas WHERE id = :id LIMIT 1");
-            $stmtAsig->execute([':id' =>$asignaturaInput]);
-            $asig =$stmtAsig->fetch(PDO::FETCH_ASSOC);
+            $stmtAsig = $pdo->prepare("SELECT nombre FROM asignaturas WHERE id = :id LIMIT 1");
+            $stmtAsig->execute([':id' => $asignaturaInput]);
+            $asig = $stmtAsig->fetch(PDO::FETCH_ASSOC);
             if ($asig) {
-                $asignatura_nombre =$asig['nombre'];
+                $asignatura_nombre = $asig['nombre'];
             }
         } else {
             $asignatura_nombre = trim($asignaturaInput);
@@ -77,12 +77,17 @@ try {
     if (is_numeric($mes_param)) {
         $mes = intval($mes_param);
     } else {
-        $meses = [             'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,             'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,             'septiembre' => 9, 'octubre' => 10, 'noviembre' => 11, 'diciembre' => 12         ];$mes = $meses[mb_strtolower(trim($mes_param))] ?? date('n');
+        $meses = [
+            'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
+            'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
+            'septiembre' => 9, 'octubre' => 10, 'noviembre' => 11, 'diciembre' => 12
+        ];
+        $mes = $meses[mb_strtolower(trim($mes_param))] ?? date('n');
     }
 
     $mes_pad = str_pad($mes, 2, '0', STR_PAD_LEFT);
 
-    // 4. Consulta Final adaptada al campo `a.asignatura`
+    // 4. Consulta Final
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -104,7 +109,8 @@ try {
             GROUP BY e.id, e.nie, e.apellidos, e.nombres
             ORDER BY e.apellidos ASC, e.nombres ASC";
 
-    $stmt =$pdo->prepare($sql);$stmt->execute([
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
         ':seccion_id'        => $seccion_id,
         ':asignatura_nombre' => $asignatura_nombre,
         ':mes'               => $mes,
@@ -112,7 +118,7 @@ try {
         ':anio'              => intval($anio)
     ]);
 
-    $reporte =$stmt->fetchAll(PDO::FETCH_ASSOC);
+    $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode([
         'success' => true,
