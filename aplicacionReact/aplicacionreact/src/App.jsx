@@ -44,15 +44,19 @@ export default function App() {
         const userObj = data.usuario || data;
         const userNombre = typeof userObj === 'string' ? userObj : (userObj.nombre || userObj.email || emailInput);
         const userRol = data.rol || userObj.rol || (emailInput.toLowerCase().includes('admin') ? 'admin' : 'docente');
-        const userId = userObj.id || userObj.docente_id || '1';
+        
+        // Obtener el ID dinámico del docente devuelto por el backend
+        const userId = userObj.id || userObj.docente_id || userObj.id_docente || null;
 
         localStorage.setItem('usuario', userNombre);
         localStorage.setItem('rol', userRol);
-        localStorage.setItem('docente_id', userId);
+        if (userId) {
+          localStorage.setItem('docente_id', userId);
+          setDocenteId(userId);
+        }
 
         setUsuario(userNombre);
         setRol(userRol);
-        setDocenteId(userId);
 
         if (userRol === 'admin') {
           setTabActiva('secciones');
@@ -63,20 +67,8 @@ export default function App() {
         setErrorLogin(data.message || 'Usuario o contraseña incorrectos');
       }
     } catch (err) {
-      const esAdminCorreo = emailInput.toLowerCase().includes('admin');
-      const userRol = esAdminCorreo ? 'admin' : 'docente';
-
-      localStorage.setItem('usuario', emailInput);
-      localStorage.setItem('rol', userRol);
-      localStorage.setItem('docente_id', '1');
-
-      setUsuario(emailInput);
-      setRol(userRol);
-      setDocenteId('1');
-
-      if (userRol === 'admin') {
-        setTabActiva('secciones');
-      }
+      console.error("Error al conectar con la API de login:", err);
+      setErrorLogin('Error de conexión con el servidor backend.');
     } finally {
       setCargando(false);
     }
@@ -143,7 +135,7 @@ export default function App() {
               type="text"
               value={emailInput}
               onChange={(e) => setEmailInput(e.target.value)}
-              placeholder="admin@escuela.edu"
+              placeholder="docente@escuela.edu"
               style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
             />
           </div>
@@ -220,7 +212,6 @@ export default function App() {
       setTabActiva={setTabActiva}
       onLogout={cerrarSesion}
     >
-      {/* Pestañas solo visibles para Docentes en vista general */}
       {!esAdmin && (
         <div className="d-flex gap-2 mb-4 border-bottom pb-2">
           <button
