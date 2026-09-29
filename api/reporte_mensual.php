@@ -16,24 +16,51 @@ try {
         $pdo = $conn;
     }
 
-    $seccionId = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
-    $asignaturaId = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? null;
+    $seccionParam = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
+    $asignaturaParam = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? null;
     $anio = $_GET['anio'] ?? date('Y');
     $mesParam = $_GET['mes'] ?? date('m');
 
-    if (empty($seccionId)) {
+    if (empty($seccionParam)) {
         echo json_encode(['success' => false, 'message' => 'La sección es requerida.', 'reporte' => []]);
         exit;
     }
 
+    // Resolver ID de Sección (soporta tanto ID numérico como Nombre de Sección)
+    if (!is_numeric($seccionParam)) {
+        $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
+        $stmtSec->execute([':nombre' => $seccionParam]);
+        $seccionId = $stmtSec->fetchColumn();
+    } else {
+        $seccionId = $seccionParam;
+    }
+
+    // Resolver ID de Asignatura (si aplica)
+    $asignaturaId = null;
+    if (!empty($asignaturaParam)) {
+        if (!is_numeric($asignaturaParam)) {
+            $stmtAsig = $pdo->prepare("SELECT id FROM asignaturas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
+            $stmtAsig->execute([':nombre' => $asignaturaParam]);
+            $asignaturaId = $stmtAsig->fetchColumn();
+        } else {
+            $asignaturaId = $asignaturaParam;
+        }
+    }
+
+    if (!$seccionId) {
+        echo json_encode(['success' => true, 'reporte' => [], 'data' => []]);
+        exit;
+    }
+
+    // Conversión de mes
     $mesesMap = [
         'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
         'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
         'septiembre' => 9, 'octubre' => 10, 'noviembre' => 11, 'diciembre' => 12
     ];
-
     $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[mb_strtolower(trim($mesParam))] ?? (int)date('m'));
 
+    // Consulta con LEFT JOIN
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -56,7 +83,6 @@ try {
             ORDER BY e.apellidos ASC, e.nombres ASC";
 
     $stmt = $pdo->prepare($sql);
-
     $params = [
         ':seccion_id' => $seccionId,
         ':anio' => $anio,
@@ -70,7 +96,7 @@ try {
     $stmt->execute($params);
     $reporte = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Se devuelven ambos formatos ('reporte' y 'data') para garantización de compatibilidad
+    // Mantiene compatibilidad total devolviendo 'reporte' y 'data'
     echo json_encode([
         'success' => true,
         'reporte' => $reporte,
@@ -79,6 +105,6 @@ try {
 
 } catch (Exception $e) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => $e->getMessage(), 'reporte' => []]);
+    echo json_encode(['success' => false, 'message' => $e->getMessage(), 'reporte' => [], 'data' => []]);
 }
 ?>
