@@ -26,10 +26,10 @@ try {
     }
 
     // Recibir parámetros del Frontend
-    $seccionParam = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
+    $seccionParam    = $_GET['seccion_id'] ?? $_GET['seccion'] ?? null;
     $asignaturaParam = $_GET['asignatura_id'] ?? $_GET['asignatura'] ?? null;
-    $anio = (int)($_GET['anio'] ?? date('Y'));
-    $mesParam = $_GET['mes'] ?? date('m');
+    $anio            = (int)($_GET['anio'] ?? date('Y'));
+    $mesParam        = $_GET['mes'] ?? date('m');
 
     if (empty($seccionParam)) {
         echo json_encode(['success' => false, 'message' => 'La sección es requerida.', 'reporte' => [], 'data' => []]);
@@ -38,7 +38,7 @@ try {
 
     // 1. Obtener ID y Nombre de la Sección
     $seccionId = null;
-    $seccionNombre = $seccionParam;
+    $seccionNombre = trim($seccionParam);
 
     if (is_numeric($seccionParam)) {
         $seccionId = (int)$seccionParam;
@@ -46,7 +46,7 @@ try {
         $stmtSec->execute([':id' => $seccionId]);
         $fetched = $stmtSec->fetchColumn();
         if ($fetched) {
-            $seccionNombre = $fetched;
+            $seccionNombre = trim($fetched);
         }
     } else {
         $stmtSec = $pdo->prepare("SELECT id FROM secciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
@@ -57,30 +57,7 @@ try {
         }
     }
 
-    // 2. Resolver ID y Nombre de Asignatura (opcional)
-    $asignaturaId = null;
-    $asignaturaNombre = $asignaturaParam;
-
-    if (!empty($asignaturaParam) && strtolower(trim($asignaturaParam)) !== 'todas') {
-        if (is_numeric($asignaturaParam)) {
-            $asignaturaId = (int)$asignaturaParam;
-            $stmtAsig = $pdo->prepare("SELECT nombre FROM asignaturas WHERE id = :id LIMIT 1");
-            $stmtAsig->execute([':id' => $asignaturaId]);
-            $fetchedA = $stmtAsig->fetchColumn();
-            if ($fetchedA) {
-                $asignaturaNombre = $fetchedA;
-            }
-        } else {
-            $stmtAsig = $pdo->prepare("SELECT id FROM asignaturas WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:nombre)) LIMIT 1");
-            $stmtAsig->execute([':nombre' => $asignaturaParam]);
-            $fetchedA = $stmtAsig->fetchColumn();
-            if ($fetchedA) {
-                $asignaturaId = (int)$fetchedA;
-            }
-        }
-    }
-
-    // 3. Normalizar mes (1-12)
+    // 2. Normalizar mes (1-12) y formatear a dos dígitos (ej. "09")
     $mesesMap = [
         'enero' => 1, 'febrero' => 2, 'marzo' => 3, 'abril' => 4,
         'mayo' => 5, 'junio' => 6, 'julio' => 7, 'agosto' => 8,
@@ -89,12 +66,14 @@ try {
     
     $mesLower = strtolower(trim((string)$mesParam));
     $mesNum = is_numeric($mesParam) ? (int)$mesParam : ($mesesMap[$mesLower] ?? (int)date('m'));
+    $mesPadded = str_pad($mesNum, 2, '0', STR_PAD_LEFT);
 
-    // 4. Filtro opcional de Asignatura
-    $whereAsignatura = "";
+    // 3. Preparación de parámetros y filtro de sección
     $params = [
-        ':anio' => $anio,
-        ':mes'  => $mesNum
+        ':anio'          => (string)$anio,
+        ':mes_num'       => $mesNum,
+        ':filtro_dash'   => "{$anio}-{$mesPadded}",
+        ':filtro_slash'  => "/{$mesPadded}/{$anio}"
     ];
 
     if (!empty($seccionId)) {
@@ -105,16 +84,18 @@ try {
         $whereSeccionEst = "e.seccion_id IN (SELECT id FROM secciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM(:seccion_nombre)))";
     }
 
+    // 4. Filtro ultra flexible de asignatura
+    $whereAsignatura = "";
     if (!empty($asignaturaParam) && strtolower(trim($asignaturaParam)) !== 'todas') {
         $whereAsignatura = " AND (
-            (a.asignatura_id IS NOT NULL AND a.asignatura_id = :asig_id)
-            OR LOWER(TRIM(a.asignatura)) = LOWER(TRIM(:asig_nombre))
+            LOWER(TRIM(a.asignatura)) = LOWER(TRIM(:asig_raw))
+            OR a.asignatura_id = :asig_raw
+            OR LOWER(TRIM(a.asignatura)) LIKE LOWER(CONCAT('%', :asig_raw, '%'))
         )";
-        $params[':asig_id'] = $asignaturaId ?? 0;
-        $params[':asig_nombre'] = $asignaturaNombre;
+        $params[':asig_raw'] = trim($asignaturaParam);
     }
 
-    // 5. Consulta SQL cruzando estrictamente estudiantes con sus asistencias registradas
+    // 5. Consulta SQL con compatibilidad de fechas e imprecisiones
     $sql = "SELECT 
                 e.id AS estudiante_id,
                 e.nie,
@@ -128,8 +109,11 @@ try {
                 COUNT(a.id) AS total_registros
             FROM estudiantes e
             LEFT JOIN asistencia a ON e.id = a.estudiante_id 
-                AND YEAR(a.fecha) = :anio 
-                AND MONTH(a.fecha) = :mes
+                AND (
+                    (YEAR(a.fecha) = :anio AND MONTH(a.fecha) = :mes_num)
+                    OR a.fecha LIKE CONCAT(:filtro_dash, '%')
+                    OR a.fecha LIKE CONCAT('%', :filtro_slash, '%')
+                )
                 {$whereAsignatura}
             WHERE {$whereSeccionEst}
             GROUP BY e.id, e.nie, e.apellidos, e.nombres
