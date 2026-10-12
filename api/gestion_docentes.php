@@ -19,26 +19,30 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 try {
     if ($method === 'GET') {
-        // Consultar directamente de la tabla 'docentes'
         $stmt = $pdo->query("SELECT id, nombre, email FROM docentes ORDER BY nombre ASC");
         echo json_encode(["success" => true, "docentes" => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
 
     } elseif ($method === 'POST') {
         $data = json_decode(file_get_contents("php://input"), true);
-        $nombre = trim($data['nombre'] ?? '');
-        $email = trim($data['email'] ?? '');
-        $password = password_hash($data['password'] ?? '123456', PASSWORD_DEFAULT);
+        
+        // Mapear campos soportando variaciones del frontend
+        $nombre   = trim($data['nombre'] ?? $data['nombre_completo'] ?? '');
+        $email    = trim($data['email'] ?? $data['correo'] ?? $data['usuario'] ?? '');
+        $password = password_hash($data['password'] ?? $data['clave'] ?? '123456', PASSWORD_DEFAULT);
 
         if (empty($nombre) || empty($email)) {
             echo json_encode(["success" => false, "message" => "El nombre y correo son obligatorios."]);
             exit();
         }
 
-        // Insertar directamente en la tabla 'docentes'
         $stmt = $pdo->prepare("INSERT INTO docentes (nombre, email, password) VALUES (:nombre, :email, :password)");
-        $stmt->execute([':nombre' => $nombre, ':email' => $email, ':password' => $password]);
+        $stmt->execute([
+            ':nombre'   => $nombre, 
+            ':email'    => $email, 
+            ':password' => $password
+        ]);
 
-        echo json_encode(["success" => true, "message" => "Docente registrado"]);
+        echo json_encode(["success" => true, "message" => "Docente registrado correctamente"]);
     }
 } catch (Exception $e) {
     http_response_code(200);
